@@ -7,6 +7,8 @@ export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingEmployee, setEditingEmployee] = useState<Profile | null>(null)
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -15,6 +17,14 @@ export default function EmployeesPage() {
     department: '',
     position: '',
     employee_id: '',
+    phone: '',
+  })
+  const [editFormData, setEditFormData] = useState({
+    password: '',
+    full_name: '',
+    role: 'employee' as 'admin' | 'manager' | 'employee',
+    department: '',
+    position: '',
     phone: '',
   })
   const [submitting, setSubmitting] = useState(false)
@@ -84,6 +94,63 @@ export default function EmployeesPage() {
       fetchEmployees()
     } catch (error) {
       console.error('Failed to delete employee:', error)
+    }
+  }
+
+  const handleEdit = (employee: Profile) => {
+    setEditingEmployee(employee)
+    setEditFormData({
+      password: '',
+      full_name: employee.full_name,
+      role: employee.role as 'admin' | 'manager' | 'employee',
+      department: employee.department || '',
+      position: employee.position || '',
+      phone: employee.phone || '',
+    })
+    setShowEditModal(true)
+    setError('')
+  }
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingEmployee) return
+    
+    setSubmitting(true)
+    setError('')
+    
+    try {
+      const updateData: any = {
+        full_name: editFormData.full_name,
+        role: editFormData.role,
+        department: editFormData.department,
+        position: editFormData.position,
+        phone: editFormData.phone,
+      }
+      
+      // Only include password if it's provided
+      if (editFormData.password) {
+        updateData.password = editFormData.password
+      }
+      
+      const response = await fetch(`/api/admin/employees/${editingEmployee.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setShowEditModal(false)
+        setEditingEmployee(null)
+        fetchEmployees()
+      } else {
+        setError(result.error || 'Failed to update employee')
+      }
+    } catch (error) {
+      setError('An error occurred')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -173,7 +240,13 @@ export default function EmployeesPage() {
                       {employee.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm space-x-3">
+                    <button
+                      onClick={() => handleEdit(employee)}
+                      className="text-blue-600 hover:text-blue-900 font-medium"
+                    >
+                      Edit
+                    </button>
                     <button
                       onClick={() => handleDelete(employee.id)}
                       className="text-red-600 hover:text-red-900 font-medium"
@@ -318,6 +391,137 @@ export default function EmployeesPage() {
                     type="button"
                     onClick={() => {
                       setShowModal(false)
+                      setError('')
+                    }}
+                    className="flex-1 bg-gray-200 text-gray-800 py-2 rounded-lg hover:bg-gray-300 font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Employee Modal */}
+      {showEditModal && editingEmployee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <h2 className="text-xl font-bold mb-4">Edit Employee</h2>
+              <form onSubmit={handleUpdate} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={editingEmployee.email}
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.full_name}
+                    onChange={(e) => setEditFormData({ ...editFormData, full_name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={editFormData.password}
+                    onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Leave blank to keep current password"
+                    minLength={6}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Only fill this if you want to change the password</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Role *
+                  </label>
+                  <select
+                    value={editFormData.role}
+                    onChange={(e) => setEditFormData({ ...editFormData, role: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="employee">Employee</option>
+                    <option value="manager">Manager</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Department
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.department}
+                    onChange={(e) => setEditFormData({ ...editFormData, department: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Position
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.position}
+                    onChange={(e) => setEditFormData({ ...editFormData, position: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium transition-colors"
+                  >
+                    {submitting ? 'Updating...' : 'Update Employee'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditModal(false)
+                      setEditingEmployee(null)
                       setError('')
                     }}
                     className="flex-1 bg-gray-200 text-gray-800 py-2 rounded-lg hover:bg-gray-300 font-medium transition-colors"
