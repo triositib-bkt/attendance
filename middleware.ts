@@ -12,8 +12,8 @@ export default withAuth(
       return NextResponse.redirect(new URL('/dashboard', req.url))
     }
 
-    // Redirect admin users to admin panel from login
-    if (req.nextUrl.pathname === '/login' && token) {
+    // Redirect authenticated users from login/home
+    if ((req.nextUrl.pathname === '/login' || req.nextUrl.pathname === '/') && token) {
       if (isAdmin) {
         return NextResponse.redirect(new URL('/admin', req.url))
       } else {
@@ -26,10 +26,17 @@ export default withAuth(
   {
     callbacks: {
       authorized: ({ token, req }) => {
-        // Allow access to login page
-        if (req.nextUrl.pathname === '/login') {
+        const pathname = req.nextUrl.pathname
+        
+        // Allow public access to home, login, and API auth routes
+        if (
+          pathname === '/' || 
+          pathname === '/login' || 
+          pathname.startsWith('/api/auth')
+        ) {
           return true
         }
+        
         // Require token for protected routes
         return !!token
       },
@@ -41,5 +48,14 @@ export default withAuth(
 )
 
 export const config = {
-  matcher: ['/admin/:path*', '/dashboard/:path*', '/login'],
+  matcher: [
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public folder
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 }
