@@ -58,8 +58,17 @@ export default function EmployeesPage() {
 
   const fetchEmployees = async () => {
     try {
-      const response = await fetch('/api/admin/employees')
+      console.log('Fetching employees...')
+      const response = await fetch('/api/admin/employees', {
+        cache: 'no-store'
+      })
       const result = await response.json()
+      console.log('Employees response:', result)
+      
+      if (result.error) {
+        console.error('Error from API:', result.error)
+      }
+      
       setEmployees(result.data || [])
     } catch (error) {
       console.error('Failed to fetch employees:', error)

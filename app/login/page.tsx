@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
+import { signIn, signOut } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,32 +20,43 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const result = await signIn('credentials', {
-      email,
-      password,
-      redirect: false,
-    })
-
-    if (result?.error) {
-      setError(result.error)
-      setLoading(false)
-      return
-    }
-
-    // Fetch user profile to check role
     try {
-      const response = await fetch('/api/auth/session')
-      const session = await response.json()
-      
-      if (session?.user?.role === 'admin' || session?.user?.role === 'manager') {
-        router.push('/admin')
-      } else {
-        router.push('/dashboard')
+      const result = await signIn('credentials', {
+        email,
+        password,
+        redirect: false,
+      })
+
+      if (result?.error) {
+        setError(result.error)
+        setLoading(false)
+        return
       }
-      router.refresh()
-    } catch (error) {
-      router.push('/dashboard')
-      router.refresh()
+
+      if (result?.ok) {
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        const debugRes = await fetch('/api/debug-session', {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        })
+        const debugData = await debugRes.json()
+        
+        if (debugData.hasSession && debugData.role) {
+          if (debugData.role === 'admin' || debugData.role === 'manager') {
+            router.push('/admin')
+          } else {
+            router.push('/dashboard')
+          }
+        } else {
+          setError('Session not created properly')
+          setLoading(false)
+        }
+      }
+    } catch (err) {
+      console.error('Login error:', err)
+      setError('An error occurred during login')
+      setLoading(false)
     }
   }
 

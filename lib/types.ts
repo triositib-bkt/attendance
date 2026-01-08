@@ -49,3 +49,17 @@ export interface AttendanceWithProfile extends Omit<Attendance, 'profiles'> {
     department: string | null
   }
 }
+
+export interface EmployeeSchedule {
+  id: string
+  user_id: string
+  day_of_week: number // 0=Sunday, 1=Monday, ..., 6=Saturday
+  shift_start: string // HH:MM:SS format
+  shift_end: string // HH:MM:SS format
+  location_id: string | null
+  effective_date: string | null // YYYY-MM-DD format
+  end_date: string | null // YYYY-MM-DD format
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}

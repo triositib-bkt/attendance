@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
-import { AttendanceWithProfile } from '@/lib/types'
+import { AttendanceWithProfile, Profile } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -19,14 +19,31 @@ import {
 
 export default function AttendancePage() {
   const [records, setRecords] = useState<AttendanceWithProfile[]>([])
+  const [employees, setEmployees] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [dateFilter, setDateFilter] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [employeeFilter, setEmployeeFilter] = useState<string>('all')
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
 
   useEffect(() => {
+    fetchEmployees()
+  }, [])
+
+  useEffect(() => {
     fetchAttendance()
-  }, [dateFilter])
+    setCurrentPage(1) // Reset to first page when filter changes
+  }, [dateFilter, employeeFilter])
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await fetch('/api/admin/employees')
+      const result = await response.json()
+      setEmployees(result.data || [])
+    } catch (error) {
+      console.error('Failed to fetch employees:', error)
+    }
+  }
 
   const fetchAttendance = async () => {
     try {
@@ -48,11 +65,16 @@ export default function AttendancePage() {
     return { text: `${hours}h ${minutes}m`, isInProgress: false }
   }
 
+  // Filter records by employee
+  const filteredRecords = employeeFilter === 'all' 
+    ? records 
+    : records.filter(record => record.user_id === employeeFilter)
+
   // Pagination logic
   const indexOfLastItem = currentPage * itemsPerPage
   const indexOfFirstItem = indexOfLastItem - itemsPerPage
-  const currentRecords = records.slice(indexOfFirstItem, indexOfLastItem)
-  const totalPages = Math.ceil(records.length / itemsPerPage)
+  const currentRecords = filteredRecords.slice(indexOfFirstItem, indexOfLastItem)
+  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage)
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -69,22 +91,42 @@ export default function AttendancePage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+      <div className="flex flex-col gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold">Attendance Records</h1>
           <p className="text-muted-foreground mt-1">View and manage daily attendance</p>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Label htmlFor="date-filter" className="text-sm font-medium">
-            Date:
-          </Label>
-          <Input
-            id="date-filter"
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="w-full sm:w-auto"
-          />
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+          <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+            <Label htmlFor="date-filter" className="text-sm font-medium whitespace-nowrap">
+              Date:
+            </Label>
+            <Input
+              id="date-filter"
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="flex-1 sm:w-auto"
+            />
+          </div>
+          <div className="flex items-center gap-2 flex-1">
+            <Label htmlFor="employee-filter" className="text-sm font-medium whitespace-nowrap">
+              Employee:
+            </Label>
+            <select
+              id="employee-filter"
+              value={employeeFilter}
+              onChange={(e) => setEmployeeFilter(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="all">All Employees</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.full_name} {employee.employee_id ? `(${employee.employee_id})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -93,14 +135,14 @@ export default function AttendancePage() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Total Present</div>
-            <div className="text-2xl font-bold mt-1">{records.length}</div>
+            <div className="text-2xl font-bold mt-1">{filteredRecords.length}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Currently Working</div>
             <div className="text-2xl font-bold mt-1">
-              {records.filter(r => !r.check_out).length}
+              {filteredRecords.filter(r => !r.check_out).length}
             </div>
           </CardContent>
         </Card>
@@ -108,7 +150,7 @@ export default function AttendancePage() {
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Completed</div>
             <div className="text-2xl font-bold mt-1">
-              {records.filter(r => r.check_out).length}
+              {filteredRecords.filter(r => r.check_out).length}
             </div>
           </CardContent>
         </Card>
@@ -227,7 +269,7 @@ export default function AttendancePage() {
       {totalPages > 1 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
           <p className="text-sm text-muted-foreground">
-            Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, records.length)} of {records.length} records
+            Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredRecords.length)} of {filteredRecords.length} records
           </p>
           <div className="flex items-center gap-2">
             <Button

@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
+import { supabase, supabaseAdmin } from '@/lib/supabase'
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 
@@ -17,12 +17,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { data: employees, error } = await supabase
+  const { data: employees, error } = await supabaseAdmin
     .from('profiles')
     .select('*')
     .order('created_at', { ascending: false })
 
-  return NextResponse.json({ data: employees, error })
+  if (error) {
+    console.error('Error fetching employees:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  console.log('Fetched employees:', employees?.length || 0)
+  return NextResponse.json({ data: employees, error: null })
 }
 
 // POST create employee
@@ -44,8 +50,8 @@ export async function POST(request: Request) {
     // Hash password
     const password_hash = await bcrypt.hash(password, 10)
 
-    // Create profile with hashed password
-    const { data: profileData, error: profileError } = await supabase
+    // Create profile with hashed password using admin client
+    const { data: profileData, error: profileError } = await supabaseAdmin
       .from('profiles')
       .insert({
         email,
@@ -60,11 +66,14 @@ export async function POST(request: Request) {
       .select()
 
     if (profileError) {
+      console.error('Profile creation error:', profileError)
       return NextResponse.json({ error: profileError.message }, { status: 400 })
     }
 
+    console.log('Employee created:', profileData)
     return NextResponse.json({ data: profileData, error: null })
   } catch (error) {
+    console.error('Employee creation failed:', error)
     return NextResponse.json({ error: 'Failed to create employee' }, { status: 500 })
   }
 }

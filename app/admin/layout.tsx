@@ -20,15 +20,23 @@ export default function AdminLayout({
   const pathname = usePathname()
 
   useEffect(() => {
+    if (status === 'loading') {
+      return
+    }
+    
     if (status === 'unauthenticated') {
       router.push('/login')
       return
     }
 
-    if (session?.user?.id) {
-      fetchProfile()
+    if (status === 'authenticated' && session?.user) {
+      if (session.user.role === 'employee') {
+        router.push('/dashboard')
+      } else {
+        fetchProfile()
+      }
     }
-  }, [session, status])
+  }, [session, status, router])
 
   const fetchProfile = async () => {
     if (!session?.user?.id) return
@@ -40,12 +48,15 @@ export default function AdminLayout({
       .single()
 
     if (data) {
-      setProfile(data)
-      // Redirect employees to dashboard
       if (data.role === 'employee') {
         router.push('/dashboard')
         return
       }
+      setProfile(data)
+    } else {
+      // If no profile found or error, redirect to login
+      router.push('/login')
+      return
     }
     setLoading(false)
   }
@@ -56,12 +67,17 @@ export default function AdminLayout({
 
   const isActive = (path: string) => pathname === path
 
-  if (loading || status === 'loading') {
+  if (loading || status === 'loading' || !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
       </div>
     )
+  }
+
+  // Double check: only allow admins and managers
+  if (profile.role === 'employee') {
+    return null
   }
 
   return (
@@ -116,6 +132,16 @@ export default function AdminLayout({
                   }`}
                 >
                   Reports
+                </Link>
+                <Link
+                  href="/admin/schedules"
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    isActive('/admin/schedules')
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-foreground hover:bg-accent hover:text-accent-foreground'
+                  }`}
+                >
+                  Schedules
                 </Link>
                 <Link
                   href="/admin/locations"
@@ -212,6 +238,17 @@ export default function AdminLayout({
                   }`}
                 >
                   📈 Reports
+                </Link>
+                <Link
+                  href="/admin/schedules"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-colors ${
+                    isActive('/admin/schedules')
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-foreground hover:bg-accent hover:text-accent-foreground'
+                  }`}
+                >
+                  🗓️ Schedules
                 </Link>
                 <Link
                   href="/admin/locations"

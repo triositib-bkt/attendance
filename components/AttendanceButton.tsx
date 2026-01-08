@@ -19,32 +19,65 @@ export default function AttendanceButton() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [currentAttendance, setCurrentAttendance] = useState<Attendance | null>(null)
+  const [schedule, setSchedule] = useState<any>(null)
   const [workingTime, setWorkingTime] = useState('')
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [actionType, setActionType] = useState<'check-in' | 'check-out'>('check-in')
   const [locationInfo, setLocationInfo] = useState<{ lat: number; lng: number } | null>(null)
   const [locationWarning, setLocationWarning] = useState<string | null>(null)
+  const [initialLoading, setInitialLoading] = useState(true)
   const supabase = createClient()
 
-  useEffect(() => {
-    checkCurrentAttendance()
-    const interval = setInterval(() => {
-      if (currentAttendance?.check_in && !currentAttendance.check_out) {
-        updateWorkingTime()
-      }
-    }, 1000)
+  // Format time from HH:MM:SS or HH:MM to 12-hour format
+  const formatTime = (time: string) => {
+    if (!time) return ''
+    const [hours, minutes] = time.split(':')
+    const hour = parseInt(hours)
+    const ampm = hour >= 12 ? 'PM' : 'AM'
+    const displayHour = hour % 12 || 12
+    return `${displayHour}:${minutes} ${ampm}`
+  }
 
+  // Fetch attendance status once on mount
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const [attendanceRes, scheduleRes] = await Promise.all([
+          fetch('/api/attendance'),
+          fetch('/api/schedule')
+        ])
+
+        const [attendanceData, scheduleData] = await Promise.all([
+          attendanceRes.json(),
+          scheduleRes.json()
+        ])
+
+        if (attendanceData.data) {
+          setCurrentAttendance(attendanceData.data)
+        }
+        if (scheduleData.data) {
+          setSchedule(scheduleData.data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch initial data:', error)
+      } finally {
+        setInitialLoading(false)
+      }
+    }
+
+    fetchInitialData()
+  }, []) // Empty dependency array - only runs once on mount
+
+  // Update working time every second if checked in
+  useEffect(() => {
+    if (!currentAttendance?.check_in || currentAttendance?.check_out) {
+      return
+    }
+
+    updateWorkingTime()
+    const interval = setInterval(updateWorkingTime, 1000)
     return () => clearInterval(interval)
   }, [currentAttendance])
-
-  const checkCurrentAttendance = async () => {
-    const response = await fetch('/api/attendance')
-    const result = await response.json()
-    
-    if (result.data) {
-      setCurrentAttendance(result.data)
-    }
-  }
 
   const updateWorkingTime = () => {
     if (currentAttendance?.check_in) {
@@ -144,24 +177,43 @@ export default function AttendanceButton() {
 
       const result = await response.json()
       
-      if (response.ok) {
-        let successMessage = `✓ ${actionType === 'check-in' ? 'Checked in' : 'Checked out'} successfully!`
+      if (response.ok && result.data) {
+        // Supabase returns data as an array, get the first item
+        const attendanceRecord = Array.isArray(result.data) ? result.data[0] : result.data
         
+        let successMessage = `✓ ${actionType === 'check-in' ? 'Checked in' : 'Checked out'} successfully!`
+        let warnings: string[] = []
+        
+        // Check for late check-in
+        if (actionType === 'check-in' && result.status === 'late') {
+          warnings.push('⏰ Late Arrival: You checked in more than 15 minutes after your scheduled start time.')
+        }
+        
+        // Check for early checkout
+        if (actionType === 'check-out' && result.isEarlyCheckout) {
+          warnings.push('⏰ Early Checkout: You checked out more than 15 minutes before your scheduled end time.')
+        }
+        
+        // Check for invalid location
         if (!result.locationValid) {
           const distanceKm = (result.distance / 1000).toFixed(2)
-          setLocationWarning(
-            `⚠️ Location Outside Allowed Area\n` +
-            `Distance: ${distanceKm}km from ${result.nearestLocation || 'nearest location'}\n` +
-            `Your attendance was recorded but flagged for review.`
+          warnings.push(
+            `📍 Location Warning: You are ${distanceKm}km away from ${result.nearestLocation || 'the nearest location'}.\n` +
+            `Your attendance was recorded but flagged for review by management.`
           )
-          successMessage += ' (Outside allowed area)'
+        }
+        
+        // Set warnings if any
+        if (warnings.length > 0) {
+          setLocationWarning(warnings.join('\n\n'))
         } else {
           setLocationWarning(null)
         }
         
         setMessage(successMessage)
+        setCurrentAttendance(attendanceRecord)
+        
         setTimeout(() => {
-          checkCurrentAttendance()
           setMessage('')
           if (result.locationValid) {
             setLocationWarning(null)
@@ -181,6 +233,22 @@ export default function AttendanceButton() {
   const isCheckedIn = !!(currentAttendance && !currentAttendance.check_out)
   const isCheckedOut = !!currentAttendance?.check_out
 
+  if (initialLoading) {
+    return (
+      <Card className="overflow-hidden border-2">
+        <CardHeader className="py-3 sm:py-6">
+          <CardTitle className="text-base sm:text-xl">Today's Attendance</CardTitle>
+        </CardHeader>
+        <CardContent className="py-12">
+          <div className="flex flex-col items-center justify-center gap-3">
+            <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <p className="text-sm text-muted-foreground">Loading attendance status...</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <>
       <Card className="overflow-hidden border-2">
@@ -188,46 +256,105 @@ export default function AttendanceButton() {
           {/* Animated gradient background */}
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/10 animate-pulse" />
           
-          <CardHeader className="relative">
+          <CardHeader className="relative py-3 sm:py-6">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-2xl">Today's Attendance</CardTitle>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                <span className="text-xs text-muted-foreground">Live</span>
+              <CardTitle className="text-base sm:text-xl">Today's Attendance</CardTitle>
+              <div className="flex items-center gap-1 sm:gap-2">
+                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-primary animate-pulse" />
+                <span className="text-[10px] sm:text-xs text-muted-foreground">Live</span>
               </div>
             </div>
           </CardHeader>
           
           <CardContent className="relative space-y-6">
+            {/* Schedule Information */}
+            {schedule && schedule.shift_start && schedule.shift_end ? (
+              <div className="p-3 sm:p-4 rounded-lg bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/20">
+                <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <span className="text-xs sm:text-sm font-semibold text-blue-700 dark:text-blue-300">Today's Schedule</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600/70 dark:text-blue-400/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="text-[9px] sm:text-xs text-muted-foreground">Start</p>
+                      <p className="text-xs sm:text-sm font-semibold">{formatTime(schedule.shift_start)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600/70 dark:text-blue-400/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="text-[9px] sm:text-xs text-muted-foreground">End</p>
+                      <p className="text-xs sm:text-sm font-semibold">{formatTime(schedule.shift_end)}</p>
+                    </div>
+                  </div>
+                </div>
+                {schedule.work_locations && (
+                  <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-blue-500/20">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600/70 dark:text-blue-400/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      <p className="text-[10px] sm:text-xs text-muted-foreground">
+                        Location: <span className="font-medium text-foreground">{schedule.work_locations.name}</span>
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-3 sm:p-4 rounded-lg bg-gradient-to-br from-amber-500/10 to-amber-500/5 border border-amber-500/20">
+                <div className="flex items-start gap-2 sm:gap-3">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p className="text-xs sm:text-sm font-semibold text-amber-700 dark:text-amber-300 mb-1">No Schedule Defined</p>
+                    <p className="text-[10px] sm:text-xs text-amber-700/80 dark:text-amber-300/80">
+                      You don't have a schedule set for today. You can still check in/out, but your attendance may need manager approval.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Status Display with fancy design */}
             <div className="relative">
               {isCheckedIn && (
-                <div className="p-6 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border-2 border-primary/20 backdrop-blur-sm">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
-                          <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="p-3 sm:p-6 rounded-lg sm:rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 sm:border-2 backdrop-blur-sm">
+                  <div className="space-y-2 sm:space-y-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
+                          <svg className="w-4 h-4 sm:w-6 sm:h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                         </div>
                         <div>
-                          <p className="text-sm text-muted-foreground">Status</p>
-                          <Badge variant="default" className="mt-1 text-sm">
+                          <p className="text-[10px] sm:text-sm text-muted-foreground">Status</p>
+                          <Badge variant="default" className="mt-0.5 sm:mt-1 text-[10px] sm:text-xs">
                             🟢 Checked In
                           </Badge>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Started at</p>
-                        <p className="text-sm font-semibold">{new Date(currentAttendance.check_in).toLocaleTimeString()}</p>
+                        <p className="text-[9px] sm:text-xs text-muted-foreground">Started at</p>
+                        <p className="text-xs sm:text-sm font-semibold">{new Date(currentAttendance.check_in).toLocaleTimeString()}</p>
                       </div>
                     </div>
                     
-                    <div className="pt-4 border-t border-primary/20">
+                    <div className="pt-2 sm:pt-4 border-t border-primary/20">
                       <div className="text-center">
-                        <p className="text-sm text-muted-foreground mb-2">Working Duration</p>
-                        <div className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                        <p className="text-[10px] sm:text-sm text-muted-foreground mb-1 sm:mb-2">Working Duration</p>
+                        <div className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
                           {workingTime}
                         </div>
                       </div>
@@ -237,30 +364,30 @@ export default function AttendanceButton() {
               )}
               
               {isCheckedOut && (
-                <div className="p-6 rounded-xl bg-gradient-to-br from-secondary/10 to-secondary/5 border-2 border-secondary/20">
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-secondary/20 flex items-center justify-center">
-                        <svg className="w-6 h-6 text-secondary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="p-3 sm:p-6 rounded-lg sm:rounded-xl bg-gradient-to-br from-secondary/10 to-secondary/5 border border-secondary/20 sm:border-2">
+                  <div className="space-y-2 sm:space-y-4">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-full bg-secondary/20 flex items-center justify-center">
+                        <svg className="w-4 h-4 sm:w-6 sm:h-6 text-secondary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Status</p>
-                        <Badge variant="secondary" className="mt-1 text-sm">
+                        <p className="text-[10px] sm:text-sm text-muted-foreground">Status</p>
+                        <Badge variant="secondary" className="mt-0.5 sm:mt-1 text-[10px] sm:text-xs">
                           ⚪ Checked Out
                         </Badge>
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-4 pt-2 sm:pt-4 border-t">
                       <div>
-                        <p className="text-xs text-muted-foreground">Check In</p>
-                        <p className="text-sm font-semibold">{new Date(currentAttendance.check_in).toLocaleTimeString()}</p>
+                        <p className="text-[9px] sm:text-xs text-muted-foreground">Check In</p>
+                        <p className="text-xs sm:text-sm font-semibold">{new Date(currentAttendance.check_in).toLocaleTimeString()}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Check Out</p>
-                        <p className="text-sm font-semibold">{new Date(currentAttendance.check_out!).toLocaleTimeString()}</p>
+                        <p className="text-[9px] sm:text-xs text-muted-foreground">Check Out</p>
+                        <p className="text-xs sm:text-sm font-semibold">{new Date(currentAttendance.check_out!).toLocaleTimeString()}</p>
                       </div>
                     </div>
                   </div>
@@ -268,37 +395,46 @@ export default function AttendanceButton() {
               )}
               
               {!currentAttendance && (
-                <div className="p-8 rounded-xl bg-gradient-to-br from-muted/50 to-muted/20 border-2 border-dashed border-muted-foreground/20 text-center">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-                    <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="p-4 sm:p-8 rounded-lg sm:rounded-xl bg-gradient-to-br from-muted/50 to-muted/20 border border-dashed sm:border-2 border-muted-foreground/20 text-center">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-2 sm:mb-4 rounded-full bg-muted flex items-center justify-center">
+                    <svg className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <p className="text-muted-foreground font-medium">Ready to start your day?</p>
-                  <p className="text-sm text-muted-foreground/60 mt-1">Check in to begin tracking your attendance</p>
+                  <p className="text-sm sm:text-base text-muted-foreground font-medium">Ready to start your day?</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground/60 mt-0.5 sm:mt-1">Check in to begin tracking</p>
+                  
+                  {schedule && (
+                    <div className="mt-3 sm:mt-4 p-2 sm:p-3 rounded-lg bg-primary/5 border border-primary/20">
+                      <p className="text-[10px] sm:text-xs text-muted-foreground mb-1">Today's Schedule</p>
+                      <p className="text-xs sm:text-sm font-semibold text-primary">
+                        🕐 {schedule.shift_start.slice(0, 5)} - {schedule.shift_end.slice(0, 5)}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
             {/* Action Buttons with icons */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-4">
               <Button
                 onClick={() => showConfirmation('check-in')}
                 disabled={loading || isCheckedIn || isCheckedOut}
-                className="h-14 text-base font-semibold transition-all hover:scale-105 shadow-lg"
+                className="h-10 sm:h-14 text-xs sm:text-base font-semibold transition-all hover:scale-105 shadow-md sm:shadow-lg"
                 size="lg"
               >
                 {loading && actionType === 'check-in' ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Loading...</span>
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span className="text-xs sm:text-base">Loading...</span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                     </svg>
-                    <span>Check In</span>
+                    <span className="text-xs sm:text-base">Check In</span>
                   </div>
                 )}
               </Button>
@@ -306,38 +442,38 @@ export default function AttendanceButton() {
                 onClick={() => showConfirmation('check-out')}
                 disabled={loading || !isCheckedIn || isCheckedOut}
                 variant="outline"
-                className="h-14 text-base font-semibold transition-all hover:scale-105 shadow-lg border-2"
+                className="h-10 sm:h-14 text-xs sm:text-base font-semibold transition-all hover:scale-105 shadow-md sm:shadow-lg border sm:border-2"
                 size="lg"
               >
                 {loading && actionType === 'check-out' ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
-                    <span>Loading...</span>
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+                    <span className="text-xs sm:text-base">Loading...</span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>
-                    <span>Check Out</span>
+                    <span className="text-xs sm:text-base">Check Out</span>
                   </div>
                 )}
               </Button>
             </div>
             
             {message && (
-              <div className={`p-4 rounded-xl text-center border-2 font-medium animate-in fade-in slide-in-from-bottom-2 ${
+              <div className={`p-2 sm:p-4 rounded-lg sm:rounded-xl text-center border sm:border-2 font-medium text-xs sm:text-base animate-in fade-in slide-in-from-bottom-2 ${
                 message.startsWith('✓') 
-                  ? 'bg-primary/10 text-primary border-primary/20 shadow-lg shadow-primary/10' 
-                  : 'bg-destructive/10 text-destructive border-destructive/20 shadow-lg shadow-destructive/10'
+                  ? 'bg-primary/10 text-primary border-primary/20 shadow-md sm:shadow-lg shadow-primary/10' 
+                  : 'bg-destructive/10 text-destructive border-destructive/20 shadow-md sm:shadow-lg shadow-destructive/10'
               }`}>
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex items-center justify-center gap-1 sm:gap-2">
                   {message.startsWith('✓') ? (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   ) : (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   )}
@@ -345,9 +481,16 @@ export default function AttendanceButton() {
                 </div>
               </div>
             )}
+            
+            {locationWarning && (
+              <div className="p-2 sm:p-4 rounded-lg bg-yellow-500/10 border sm:border-2 border-yellow-500/30 text-yellow-700 dark:text-yellow-400">
+                <div className="font-semibold text-xs sm:text-base mb-1 sm:mb-2">⚠️ Location Warning</div>
+                <div className="text-[10px] sm:text-sm whitespace-pre-line">{locationWarning}</div>
+              </div>
+            )}
 
-            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex items-center justify-center gap-1 sm:gap-2 text-[9px] sm:text-xs text-muted-foreground bg-muted/50 rounded-md sm:rounded-lg p-2 sm:p-3">
+              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
@@ -361,59 +504,59 @@ export default function AttendanceButton() {
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-2xl">
+            <DialogTitle className="text-lg sm:text-2xl">
               {actionType === 'check-in' ? '🟢 Check In' : '🔴 Check Out'}
             </DialogTitle>
-            <DialogDescription className="text-base">
+            <DialogDescription className="text-sm sm:text-base">
               {actionType === 'check-in'
                 ? 'Are you ready to start your work day?'
                 : 'Are you ready to end your work day?'}
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 py-4">
-            <div className="p-4 rounded-lg bg-muted/50 space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="space-y-2 sm:space-y-4 py-2 sm:py-4">
+            <div className="p-2 sm:p-4 rounded-lg bg-muted/50 space-y-2 sm:space-y-3">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium">Time</p>
-                  <p className="text-lg font-bold">{new Date().toLocaleTimeString()}</p>
+                  <p className="text-xs sm:text-sm font-medium">Time</p>
+                  <p className="text-sm sm:text-lg font-bold">{new Date().toLocaleTimeString()}</p>
                 </div>
               </div>
               
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Location</p>
-                  <p className="text-xs text-muted-foreground">
-                    {locationInfo ? `${locationInfo.lat.toFixed(6)}, ${locationInfo.lng.toFixed(6)}` : 'Detecting...'}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium">Location</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
+                    {locationInfo ? `${locationInfo.lat.toFixed(4)}, ${locationInfo.lng.toFixed(4)}` : 'Detecting...'}
                   </p>
                 </div>
               </div>
               
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium">Date</p>
-                  <p className="text-sm">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  <p className="text-xs sm:text-sm font-medium">Date</p>
+                  <p className="text-xs sm:text-sm">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
                 </div>
               </div>
             </div>
             
-            <p className="text-sm text-muted-foreground text-center px-4">
+            <p className="text-xs sm:text-sm text-muted-foreground text-center px-2 sm:px-4">
               {actionType === 'check-in'
                 ? 'Your attendance will be recorded with the current time and GPS location.'
                 : 'This will mark the end of your work shift for today.'}

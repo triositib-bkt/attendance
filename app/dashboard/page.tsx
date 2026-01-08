@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { supabase } from '@/lib/supabase'
@@ -14,20 +14,10 @@ export default function DashboardPage() {
   const { data: session, status } = useSession()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [hasCheckedSession, setHasCheckedSession] = useState(false)
   const router = useRouter()
 
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login')
-      return
-    }
-
-    if (session?.user?.id) {
-      fetchProfile()
-    }
-  }, [session, status])
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     if (!session?.user?.id) return
 
     const { data, error } = await supabase
@@ -38,14 +28,31 @@ export default function DashboardPage() {
 
     if (data) {
       setProfile(data)
-      // Redirect admins and managers to admin panel
-      if (data.role === 'admin' || data.role === 'manager') {
+    }
+    setLoading(false)
+  }, [session?.user?.id])
+
+  useEffect(() => {
+    if (status === 'loading') {
+      return
+    }
+    
+    setHasCheckedSession(true)
+    
+    if (status === 'unauthenticated') {
+      router.push('/login')
+      return
+    }
+
+    if (status === 'authenticated' && session?.user) {
+      if (session.user.role === 'admin' || session.user.role === 'manager') {
         router.push('/admin')
         return
       }
+      
+      fetchProfile()
     }
-    setLoading(false)
-  }
+  }, [session?.user?.id, session?.user?.role, status, fetchProfile, router])
 
   const handleLogout = async () => {
     await signOut({ callbackUrl: '/login' })
