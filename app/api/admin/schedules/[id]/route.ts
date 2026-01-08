@@ -25,7 +25,7 @@ export async function PUT(
   }
 
   const body = await request.json()
-  const { shift_start, shift_end, location_id, effective_date, end_date } = body
+  const { shift_start, shift_end, location_id, effective_date, end_date, day_of_week } = body
 
   if (!shift_start || !shift_end) {
     return NextResponse.json(
@@ -42,16 +42,34 @@ export async function PUT(
     )
   }
 
+  const updateData: any = {
+    shift_start,
+    shift_end,
+    updated_at: new Date().toISOString()
+  }
+
+  // Only update location_id if it's provided in the request
+  if (location_id !== undefined) {
+    updateData.location_id = location_id || null
+  }
+
+  // Only update date fields if they're provided
+  if (effective_date !== undefined) {
+    updateData.effective_date = effective_date
+  }
+
+  if (end_date !== undefined) {
+    updateData.end_date = end_date
+  }
+
+  // Only update day_of_week if it's provided
+  if (day_of_week !== undefined) {
+    updateData.day_of_week = day_of_week
+  }
+
   const { data, error } = await supabaseAdmin
     .from('employee_schedules')
-    .update({
-      shift_start,
-      shift_end,
-      location_id: location_id !== undefined ? location_id : undefined,
-      effective_date: effective_date !== undefined ? effective_date : undefined,
-      end_date: end_date !== undefined ? end_date : undefined,
-      updated_at: new Date().toISOString()
-    })
+    .update(updateData)
     .eq('id', params.id)
     .select()
 

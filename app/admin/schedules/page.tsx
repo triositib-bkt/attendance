@@ -48,6 +48,8 @@ export default function SchedulesPage() {
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showAddDialog, setShowAddDialog] = useState(false)
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [editingSchedule, setEditingSchedule] = useState<ScheduleWithProfile | null>(null)
   const [selectedEmployee, setSelectedEmployee] = useState('')
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString())
   const [selectedMonth, setSelectedMonth] = useState((new Date().getMonth() + 1).toString())
@@ -62,6 +64,14 @@ export default function SchedulesPage() {
     shift_start: '09:00',
     shift_end: '17:00',
     location_id: ''
+  })
+
+  // Edit form states
+  const [editFormData, setEditFormData] = useState({
+    shift_start: '',
+    shift_end: '',
+    location_id: '',
+    schedule_date: ''
   })
 
   useEffect(() => {
@@ -182,6 +192,64 @@ export default function SchedulesPage() {
     } catch (error) {
       console.error('Failed to delete schedule:', error)
       alert('Failed to delete schedule')
+    }
+  }
+
+  const handleEditSchedule = (schedule: ScheduleWithProfile) => {
+    setEditingSchedule(schedule)
+    setEditFormData({
+      shift_start: schedule.shift_start.slice(0, 5),
+      shift_end: schedule.shift_end.slice(0, 5),
+      location_id: schedule.location_id || '',
+      schedule_date: schedule.effective_date || ''
+    })
+    setShowEditDialog(true)
+  }
+
+  const handleUpdateSchedule = async () => {
+    if (!editingSchedule || !editFormData.shift_start || !editFormData.shift_end) {
+      alert('Please fill in all required fields')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const payload: any = {
+        shift_start: editFormData.shift_start,
+        shift_end: editFormData.shift_end,
+        location_id: editFormData.location_id || null
+      }
+
+      // If schedule date is changed, update effective_date and end_date
+      if (editFormData.schedule_date && editFormData.schedule_date !== editingSchedule.effective_date) {
+        const selectedDate = new Date(editFormData.schedule_date + 'T00:00:00')
+        const dayOfWeek = selectedDate.getDay()
+        
+        payload.effective_date = editFormData.schedule_date
+        payload.end_date = editFormData.schedule_date
+        payload.day_of_week = dayOfWeek
+      }
+
+      const response = await fetch(`/api/admin/schedules/${editingSchedule.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setShowEditDialog(false)
+        setEditingSchedule(null)
+        fetchSchedules()
+      } else {
+        alert(result.error || 'Failed to update schedule')
+      }
+    } catch (error) {
+      console.error('Failed to update schedule:', error)
+      alert('Failed to update schedule')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -448,13 +516,22 @@ export default function SchedulesPage() {
                           </div>
                         )}
                       </div>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDeleteSchedule(schedule.id)}
-                      >
-                        Delete
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditSchedule(schedule)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeleteSchedule(schedule.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -527,6 +604,14 @@ export default function SchedulesPage() {
                         className="h-7 text-xs"
                       >
                         Print
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditSchedule(schedule)}
+                        className="h-7 text-xs"
+                      >
+                        Edit
                       </Button>
                       <Button
                         variant="ghost"
@@ -662,6 +747,112 @@ export default function SchedulesPage() {
                   </option>
                 ))}
               </select>
+
+      {/* Edit Schedule Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Schedule</DialogTitle>
+            <DialogDescription>
+              Update work schedule for {editingSchedule?.profiles.full_name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Employee</Label>
+              <div className="p-3 rounded-lg bg-muted">
+                <p className="font-medium">{editingSchedule?.profiles.full_name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {editingSchedule?.profiles.employee_id && `ID: ${editingSchedule.profiles.employee_id}`}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-schedule-date">Schedule Date</Label>
+              <Input
+                id="edit-schedule-date"
+                type="date"
+                value={editFormData.schedule_date}
+                onChange={(e) => setEditFormData({ ...editFormData, schedule_date: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Current: {editingSchedule?.effective_date 
+                  ? new Date(editingSchedule.effective_date + 'T00:00:00').toLocaleDateString('en-US', { 
+                      weekday: 'short', 
+                      year: 'numeric', 
+                      month: 'short', 
+                      day: 'numeric' 
+                    })
+                  : DAYS[editingSchedule?.day_of_week || 0]
+                }
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-shift-start">Shift Start</Label>
+                <Input
+                  id="edit-shift-start"
+                  type="time"
+                  value={editFormData.shift_start}
+                  onChange={(e) => setEditFormData({ ...editFormData, shift_start: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-shift-end">Shift End</Label>
+                <Input
+                  id="edit-shift-end"
+                  type="time"
+                  value={editFormData.shift_end}
+                  onChange={(e) => setEditFormData({ ...editFormData, shift_end: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-location">Location (Optional)</Label>
+              <select
+                id="edit-location"
+                value={editFormData.location_id}
+                onChange={(e) => setEditFormData({ ...editFormData, location_id: e.target.value })}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">All Locations</option>
+                {locations.filter(l => l.is_active).map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Current: {editingSchedule?.work_locations?.name || editingSchedule?.location_name || 'All locations'}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowEditDialog(false)
+                setEditingSchedule(null)
+              }} 
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleUpdateSchedule} 
+              disabled={!editFormData.shift_start || !editFormData.shift_end || isSubmitting}
+            >
+              {isSubmitting ? 'Updating...' : 'Update Schedule'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
               <p className="text-xs text-muted-foreground">Optional: assign to specific location</p>
             </div>
           </div>
