@@ -3,7 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { NextResponse } from 'next/server'
 
-// GET all work locations
+// GET all job templates with area and location details
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions)
   
@@ -11,18 +11,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Fetch locations with office areas
-  const { data: locations, error } = await supabase
-    .from('work_locations')
+  const { data, error } = await supabase
+    .from('job_templates')
     .select(`
       *,
-      office_areas (
+      office_area:office_areas (
         id,
         name,
-        description,
-        is_active,
-        created_at,
-        updated_at
+        location:work_locations (
+          id,
+          name
+        )
       )
     `)
     .order('created_at', { ascending: false })
@@ -31,10 +30,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ data: null, error }, { status: 500 })
   }
 
-  return NextResponse.json({ data: locations, error: null })
+  return NextResponse.json({ data, error: null })
 }
 
-// POST create work location
+// POST create job template
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   
@@ -50,9 +49,16 @@ export async function POST(request: Request) {
   const body = await request.json()
   
   const { data, error } = await supabase
-    .from('work_locations')
-    .insert(body)
+    .from('job_templates')
+    .insert({
+      ...body,
+      is_active: true,
+    })
     .select()
 
-  return NextResponse.json({ data, error })
+  if (error) {
+    return NextResponse.json({ data: null, error }, { status: 500 })
+  }
+
+  return NextResponse.json({ data, error: null })
 }

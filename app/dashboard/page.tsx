@@ -6,11 +6,12 @@ import { useSession, signOut } from 'next-auth/react'
 import { supabase } from '@/lib/supabase'
 import AttendanceButton from '@/components/AttendanceButton'
 import AttendanceHistory from '@/components/AttendanceHistory'
+import JobChecklist from '@/components/JobChecklist'
 import { Profile } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-type TabType = 'attendance' | 'checkin' | 'profile'
+type TabType = 'attendance' | 'checkin' | 'jobs' | 'profile'
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
@@ -173,6 +174,11 @@ export default function DashboardPage() {
           <div className="mt-8">
             <AttendanceHistory />
           </div>
+
+          {/* Job Checklist */}
+          <div className="mt-8">
+            <JobChecklist />
+          </div>
         </main>
       </div>
 
@@ -220,6 +226,14 @@ export default function DashboardPage() {
             <div className="space-y-4">
               <h2 className="text-xl font-bold">Check In/Out</h2>
               <AttendanceButton />
+            </div>
+          )}
+
+          {/* Jobs Tab */}
+          {activeTab === 'jobs' && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold">Today's Jobs</h2>
+              <JobChecklist />
             </div>
           )}
 
@@ -308,7 +322,20 @@ export default function DashboardPage() {
               </svg>
               <span className="text-xs font-medium">Check In/Out</span>
             </button>
-
+            {/* Jobs Tab */}
+            <button
+              onClick={() => setActiveTab('jobs')}
+              className={`flex-1 flex flex-col items-center justify-center py-3 transition-colors ${
+                activeTab === 'jobs'
+                  ? 'text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              <span className="text-xs font-medium">Jobs</span>
+            </button>
             {/* Profile Tab */}
             <button
               onClick={() => setActiveTab('profile')}
