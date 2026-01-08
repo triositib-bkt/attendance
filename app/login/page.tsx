@@ -32,17 +32,29 @@ export default function LoginPage() {
       return
     }
 
-    // Redirect will be handled by middleware
-    router.push('/dashboard')
-    router.refresh()
+    // Fetch user profile to check role
+    try {
+      const response = await fetch('/api/auth/session')
+      const session = await response.json()
+      
+      if (session?.user?.role === 'admin' || session?.user?.role === 'manager') {
+        router.push('/admin')
+      } else {
+        router.push('/dashboard')
+      }
+      router.refresh()
+    } catch (error) {
+      router.push('/dashboard')
+      router.refresh()
+    }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
+      <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-3xl font-bold">Attendance System</CardTitle>
-          <CardDescription>PT Trio Siti Bersaudara</CardDescription>
+          <CardTitle className="text-3xl font-bold tracking-tight">Attendance System</CardTitle>
+          <CardDescription className="text-base">PT Trio Siti Bersaudara</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
@@ -71,7 +83,7 @@ export default function LoginPage() {
             </div>
             
             {error && (
-              <div className="bg-destructive/15 border border-destructive/50 text-destructive px-4 py-3 rounded-md text-sm">
+              <div className="rounded-lg border border-destructive bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {error}
               </div>
             )}

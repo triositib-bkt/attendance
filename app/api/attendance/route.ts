@@ -3,6 +3,26 @@ import { authOptions } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { NextResponse } from 'next/server'
 
+function calculateDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371e3 // Earth's radius in meters
+  const φ1 = (lat1 * Math.PI) / 180
+  const φ2 = (lat2 * Math.PI) / 180
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+
+  return R * c
+}
+
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   const { type, latitude, longitude } = await request.json()
@@ -17,25 +37,31 @@ export async function POST(request: Request) {
     .select('*')
     .eq('is_active', true)
 
-  // Verify location (optional - can be disabled for testing)
-  // if (locations && locations.length > 0) {
-  //   const withinRange = locations.some(location => {
-  //     const distance = calculateDistance(
-  //       latitude,
-  //       longitude,
-  //       location.latitude,
-  //       location.longitude
-  //     )
-  //     return distance <= location.radius_meters
-  //   })
-  //
-  //   if (!withinRange) {
-  //     return NextResponse.json(
-  //       { error: 'You are not within the allowed location' },
-  //       { status: 400 }
-  //     )
-  //   }
-  // }
+  // Check if location is within allowed areas
+  let isWithinAllowedLocation = false
+  let nearestLocation = null
+  let minDistance = Infinity
+
+  if (locations && locations.length > 0) {
+    for (const location of locations) {
+      const distance = calculateDistance(
+        latitude,
+        longitude,
+        location.latitude,
+        location.longitude
+      )
+      
+      if (distance < minDistance) {
+        minDistance = distance
+        nearestLocation = location
+      }
+      
+      if (distance <= location.radius_meters) {
+        isWithinAllowedLocation = true
+        break
+      }
+    }
+  }
 
   if (type === 'check-in') {
     // Check if already checked in today
@@ -64,11 +90,18 @@ export async function POST(request: Request) {
         check_in: new Date().toISOString(),
         check_in_lat: latitude,
         check_in_lng: longitude,
+        check_in_location_valid: isWithinAllowedLocation,
         status: 'present'
       })
       .select()
     
-    return NextResponse.json({ data, error })
+    return NextResponse.json({ 
+      data, 
+      error,
+      locationValid: isWithinAllowedLocation,
+      distance: minDistance,
+      nearestLocation: nearestLocation?.name
+    })
   } else if (type === 'check-out') {
     // Get today's attendance record without check-out
     const { data: record } = await supabase
@@ -92,12 +125,19 @@ export async function POST(request: Request) {
       .update({
         check_out: new Date().toISOString(),
         check_out_lat: latitude,
-        check_out_lng: longitude
+        check_out_lng: longitude,
+        check_out_location_valid: isWithinAllowedLocation
       })
       .eq('id', record.id)
       .select()
     
-    return NextResponse.json({ data, error })
+    return NextResponse.json({ 
+      data, 
+      error,
+      locationValid: isWithinAllowedLocation,
+      distance: minDistance,
+      nearestLocation: nearestLocation?.name
+    })
   }
 
   return NextResponse.json({ error: 'Invalid type' }, { status: 400 })

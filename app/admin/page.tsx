@@ -97,7 +97,7 @@ export default function AdminDashboard() {
             </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.presentToday}</div>
+            <div className="text-2xl font-bold">{stats.presentToday}</div>
           </CardContent>
         </Card>
 
@@ -109,7 +109,7 @@ export default function AdminDashboard() {
             </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-600">{stats.avgAttendance}%</div>
+            <div className="text-2xl font-bold">{stats.avgAttendance}%</div>
           </CardContent>
         </Card>
 
@@ -121,7 +121,7 @@ export default function AdminDashboard() {
             </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{Math.round(stats.totalHours)}h</div>
+            <div className="text-2xl font-bold">{Math.round(stats.totalHours)}h</div>
           </CardContent>
         </Card>
       </div>
@@ -134,15 +134,15 @@ export default function AdminDashboard() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Link href="/admin/employees">
-              <Card className="cursor-pointer hover:bg-accent transition-colors">
+              <Card className="cursor-pointer hover:bg-accent transition-colors border-2">
                 <CardContent className="flex items-center p-4">
-                  <div className="bg-blue-100 dark:bg-blue-900 p-3 rounded-full mr-4">
-                    <svg className="w-6 h-6 text-blue-600 dark:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="bg-primary/10 p-3 rounded-lg mr-4">
+                    <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                     </svg>
                   </div>
                   <div>
-                    <h3 className="font-medium">Add Employee</h3>
+                    <h3 className="font-semibold">Add Employee</h3>
                     <p className="text-sm text-muted-foreground">Create new employee account</p>
                   </div>
                 </CardContent>
@@ -150,15 +150,15 @@ export default function AdminDashboard() {
             </Link>
 
             <Link href="/admin/attendance">
-              <Card className="cursor-pointer hover:bg-accent transition-colors">
+              <Card className="cursor-pointer hover:bg-accent transition-colors border-2">
                 <CardContent className="flex items-center p-4">
-                  <div className="bg-green-100 dark:bg-green-900 p-3 rounded-full mr-4">
-                    <svg className="w-6 h-6 text-green-600 dark:text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="bg-primary/10 p-3 rounded-lg mr-4">
+                    <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
                   </div>
                   <div>
-                    <h3 className="font-medium">View Attendance</h3>
+                    <h3 className="font-semibold">View Attendance</h3>
                     <p className="text-sm text-muted-foreground">Check today's records</p>
                   </div>
                 </CardContent>
@@ -166,15 +166,15 @@ export default function AdminDashboard() {
             </Link>
 
             <Link href="/admin/reports">
-              <Card className="cursor-pointer hover:bg-accent transition-colors">
+              <Card className="cursor-pointer hover:bg-accent transition-colors border-2">
                 <CardContent className="flex items-center p-4">
-                  <div className="bg-purple-100 dark:bg-purple-900 p-3 rounded-full mr-4">
-                    <svg className="w-6 h-6 text-purple-600 dark:text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="bg-primary/10 p-3 rounded-lg mr-4">
+                    <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                   </div>
                   <div>
-                    <h3 className="font-medium">Generate Report</h3>
+                    <h3 className="font-semibold">Generate Report</h3>
                     <p className="text-sm text-muted-foreground">View monthly analytics</p>
                   </div>
                 </CardContent>

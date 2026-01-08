@@ -24,6 +24,8 @@ export interface Attendance {
   check_in_lng: number | null
   check_out_lat: number | null
   check_out_lng: number | null
+  check_in_location_valid: boolean
+  check_out_location_valid: boolean
   status: 'present' | 'late' | 'absent'
   notes: string | null
   created_at: string

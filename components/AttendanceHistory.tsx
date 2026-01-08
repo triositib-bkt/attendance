@@ -47,9 +47,9 @@ export default function AttendanceHistory() {
     return `${hours}h ${minutes}m`
   }
 
-  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" => {
+  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
     if (status === 'present') return 'default'
-    if (status === 'late') return 'secondary'
+    if (status === 'late') return 'outline'
     return 'destructive'
   }
 
@@ -84,12 +84,13 @@ export default function AttendanceHistory() {
                 <TableHead>Check Out</TableHead>
                 <TableHead>Duration</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Location</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {records.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
                     No attendance records found for this month
                   </TableCell>
                 </TableRow>
@@ -97,7 +98,12 @@ export default function AttendanceHistory() {
                 records.map((record) => (
                   <TableRow key={record.id}>
                     <TableCell>
-                      {format(new Date(record.check_in), 'MMM dd, yyyy')}
+                      <div>{format(new Date(record.check_in), 'MMM dd, yyyy')}</div>
+                      {((record as any).check_in_location_valid === false || (record as any).check_out_location_valid === false) && (
+                        <Badge variant="outline" className="mt-1 text-xs bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30">
+                          ⚠️ Location Issue
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       {format(new Date(record.check_in), 'HH:mm:ss')}
@@ -109,16 +115,26 @@ export default function AttendanceHistory() {
                       {calculateDuration(record.check_in, record.check_out)}
                     </TableCell>
                     <TableCell>
-                      <Badge 
-                        variant={getStatusVariant(record.status)}
-                        className={
-                          record.status === 'late' 
-                            ? 'bg-yellow-500 hover:bg-yellow-600' 
-                            : ''
-                        }
-                      >
+                      <Badge variant={getStatusVariant(record.status)}>
                         {record.status}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {(record as any).check_in_location_valid === false && (
+                        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30 mb-1 block w-fit">
+                          ⚠️ Check-in
+                        </Badge>
+                      )}
+                      {(record as any).check_out_location_valid === false && (
+                        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30 block w-fit">
+                          ⚠️ Check-out
+                        </Badge>
+                      )}
+                      {(record as any).check_in_location_valid !== false && (record as any).check_out_location_valid !== false && (
+                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
+                          ✓ Valid
+                        </Badge>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
