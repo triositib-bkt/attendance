@@ -16,7 +16,7 @@ export async function PUT(
 
   const { id } = params
   const body = await request.json()
-  const { notes } = body
+  const { notes, endPhotoUrl } = body
 
   try {
     // Mark job as completed
@@ -26,6 +26,7 @@ export async function PUT(
         completed_at: new Date().toISOString(),
         completed_by: session.user.id,
         notes: notes || null,
+        end_photo_url: endPhotoUrl || null,
       })
       .eq('id', id)
       .select(`
@@ -65,6 +66,8 @@ export async function DELETE(
   }
 
   const { id } = params
+  const body = await request.json()
+  const { action } = body // 'restart' or 'in-progress'
 
   try {
     // Check if user is admin or the one who completed it
@@ -83,14 +86,32 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Mark as uncompleted
-    const { data, error } = await supabase
-      .from('job_checklists')
-      .update({
+    let updateData: any
+
+    if (action === 'restart') {
+      // Full restart - clear everything
+      updateData = {
+        start_time: null,
         completed_at: null,
         completed_by: null,
         notes: null,
-      })
+        start_photo_url: null,
+        end_photo_url: null,
+      }
+    } else {
+      // Back to in-progress - keep start info, clear completion
+      updateData = {
+        completed_at: null,
+        completed_by: null,
+        notes: null,
+        end_photo_url: null,
+      }
+    }
+
+    // Update the job
+    const { data, error } = await supabase
+      .from('job_checklists')
+      .update(updateData)
       .eq('id', id)
       .select()
       .single()
@@ -99,7 +120,11 @@ export async function DELETE(
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ data, message: 'Job marked as incomplete' })
+    const message = action === 'restart' 
+      ? 'Job restarted successfully' 
+      : 'Job marked as in progress'
+
+    return NextResponse.json({ data, message })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
