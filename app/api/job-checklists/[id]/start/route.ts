@@ -15,10 +15,14 @@ export async function POST(
   }
 
   try {
+    const body = await request.json().catch(() => ({}))
+    const { photoUrl } = body
+
     const { data, error } = await supabase
       .from('job_checklists')
       .update({
         start_time: new Date().toISOString(),
+        start_photo_url: photoUrl || null,
       })
       .eq('id', params.id)
       .select(`
