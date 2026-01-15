@@ -114,17 +114,25 @@ export default function EmployeesPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to deactivate this employee?')) return
+  const handleToggleStatus = async (id: string, currentStatus: boolean) => {
+    const action = currentStatus ? 'deactivate' : 'activate'
+    if (!confirm(`Are you sure you want to ${action} this employee?`)) return
 
     try {
-      await fetch(`/api/admin/employees/${id}`, {
-        method: 'DELETE',
+      const response = await fetch(`/api/admin/employees/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !currentStatus }),
       })
       
-      fetchEmployees()
+      if (response.ok) {
+        fetchEmployees()
+      } else {
+        alert(`Failed to ${action} employee`)
+      }
     } catch (error) {
-      console.error('Failed to delete employee:', error)
+      console.error(`Failed to ${action} employee:`, error)
+      alert(`Failed to ${action} employee`)
     }
   }
 
@@ -262,13 +270,12 @@ export default function EmployeesPage() {
                   Edit
                 </Button>
                 <Button
-                  onClick={() => handleDelete(employee.id)}
-                  variant="destructive"
+                  onClick={() => handleToggleStatus(employee.id, employee.is_active)}
+                  variant={employee.is_active ? "destructive" : "default"}
                   size="sm"
                   className="flex-1"
-                  disabled={!employee.is_active}
                 >
-                  Deactivate
+                  {employee.is_active ? 'Deactivate' : 'Activate'}
                 </Button>
               </div>
             </CardContent>
@@ -317,13 +324,12 @@ export default function EmployeesPage() {
                       Edit
                     </Button>
                     <Button
-                      onClick={() => handleDelete(employee.id)}
+                      onClick={() => handleToggleStatus(employee.id, employee.is_active)}
                       variant="ghost"
                       size="sm"
-                      className="text-destructive hover:text-destructive"
-                      disabled={!employee.is_active}
+                      className={employee.is_active ? "text-destructive hover:text-destructive" : "text-green-600 hover:text-green-600"}
                     >
-                      Deactivate
+                      {employee.is_active ? 'Deactivate' : 'Activate'}
                     </Button>
                   </div>
                 </TableCell>

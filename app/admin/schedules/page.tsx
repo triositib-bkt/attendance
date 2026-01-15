@@ -49,8 +49,10 @@ export default function SchedulesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false)
   const [editingSchedule, setEditingSchedule] = useState<ScheduleWithProfile | null>(null)
   const [selectedEmployee, setSelectedEmployee] = useState('')
+  const [selectedLocation, setSelectedLocation] = useState('')
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString())
   const [selectedMonth, setSelectedMonth] = useState((new Date().getMonth() + 1).toString())
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -74,11 +76,24 @@ export default function SchedulesPage() {
     schedule_date: ''
   })
 
+  // Generate form states
+  const [generateFormData, setGenerateFormData] = useState({
+    user_id: '',
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: new Date().toISOString().split('T')[0],
+    shift_start: '09:00',
+    shift_end: '17:00',
+    location_id: '',
+    overwrite: false
+  })
+
+  const [generateMessage, setGenerateMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+
   useEffect(() => {
     fetchEmployees()
     fetchLocations()
     fetchSchedules()
-  }, [selectedEmployee, selectedYear, selectedMonth])
+  }, [selectedEmployee, selectedLocation, selectedYear, selectedMonth])
 
   const fetchEmployees = async () => {
     try {
@@ -104,6 +119,7 @@ export default function SchedulesPage() {
     try {
       const params = new URLSearchParams()
       if (selectedEmployee) params.append('userId', selectedEmployee)
+      if (selectedLocation) params.append('location_id', selectedLocation)
       if (selectedYear) params.append('year', selectedYear)
       if (selectedMonth) params.append('month', selectedMonth)
       
@@ -253,6 +269,54 @@ export default function SchedulesPage() {
     }
   }
 
+  const handleBulkGenerate = async () => {
+    if (!generateFormData.user_id || !generateFormData.start_date || !generateFormData.end_date || !generateFormData.location_id) {
+      alert('Please fill in all required fields')
+      return
+    }
+
+    if (new Date(generateFormData.start_date) > new Date(generateFormData.end_date)) {
+      alert('Start date must be before or equal to end date')
+      return
+    }
+
+    setIsSubmitting(true)
+    setGenerateMessage(null)
+    
+    console.log('Sending bulk generation request:', generateFormData)
+    
+    try {
+      const response = await fetch('/api/admin/schedules/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(generateFormData)
+      })
+
+      const result = await response.json()
+      
+      console.log('Bulk generation response:', result)
+      
+      if (response.ok) {
+        setGenerateMessage({ 
+          type: 'success', 
+          text: `Generated ${result.created} schedule(s). Skipped ${result.skipped} existing schedule(s).` 
+        })
+        setTimeout(() => {
+          setShowGenerateDialog(false)
+          setGenerateMessage(null)
+          fetchSchedules()
+        }, 2000)
+      } else {
+        setGenerateMessage({ type: 'error', text: result.error || 'Failed to generate schedules' })
+      }
+    } catch (error) {
+      console.error('Failed to generate schedules:', error)
+      setGenerateMessage({ type: 'error', text: 'Failed to generate schedules: ' + (error as Error).message })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const handlePrintSchedule = (userId: string, employeeName: string) => {
     const employeeSchedules = schedules.filter(s => s.user_id === userId)
     if (employeeSchedules.length === 0) {
@@ -394,6 +458,9 @@ export default function SchedulesPage() {
             >
               🖨️ Print
             </Button>
+            <Button variant="outline" onClick={() => setShowGenerateDialog(true)}>
+              📅 Generate Bulk
+            </Button>
             <Button onClick={() => setShowAddDialog(true)}>
               Add Schedule
             </Button>
@@ -417,6 +484,23 @@ export default function SchedulesPage() {
             {employees.map((employee) => (
               <option key={employee.id} value={employee.id}>
                 {employee.full_name} {employee.employee_id ? `(${employee.employee_id})` : ''}
+              </option>
+            ))}
+          </select>
+
+          <select
+            id="location-filter"
+            value={selectedLocation}
+            onChange={(e) => {
+              setSelectedLocation(e.target.value)
+              setCurrentPage(1)
+            }}
+            className="flex h-10 w-full sm:w-48 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            <option value="">All Locations</option>
+            {locations.map((location) => (
+              <option key={location.id} value={location.id}>
+                {location.name}
               </option>
             ))}
           </select>
@@ -747,6 +831,165 @@ export default function SchedulesPage() {
                   </option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAddSchedule} 
+              disabled={!formData.user_id || !formData.schedule_date || isSubmitting}
+            >
+              {isSubmitting ? 'Saving...' : 'Add Schedule'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generate Schedules Dialog */}
+      <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Generate Bulk Schedules</DialogTitle>
+            <DialogDescription>
+              Create schedules for an employee across a date range. Existing schedules will be skipped.
+            </DialogDescription>
+          </DialogHeader>
+
+          {generateMessage && (
+            <div className={`p-3 rounded-md text-sm ${generateMessage.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+              {generateMessage.text}
+            </div>
+          )}
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="gen-employee">Employee *</Label>
+              <select
+                id="gen-employee"
+                value={generateFormData.user_id}
+                onChange={(e) => setGenerateFormData({ ...generateFormData, user_id: e.target.value })}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Select Employee</option>
+                {employees.filter(e => e.is_active).map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.full_name} {employee.employee_id ? `(${employee.employee_id})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="gen-location">Location *</Label>
+              <select
+                id="gen-location"
+                value={generateFormData.location_id}
+                onChange={(e) => setGenerateFormData({ ...generateFormData, location_id: e.target.value })}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Select Location</option>
+                {locations.filter(l => l.is_active).map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="gen-start-date">Start Date *</Label>
+                <Input
+                  id="gen-start-date"
+                  type="date"
+                  value={generateFormData.start_date}
+                  onChange={(e) => setGenerateFormData({ ...generateFormData, start_date: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="gen-end-date">End Date *</Label>
+                <Input
+                  id="gen-end-date"
+                  type="date"
+                  value={generateFormData.end_date}
+                  onChange={(e) => setGenerateFormData({ ...generateFormData, end_date: e.target.value })}
+                  min={generateFormData.start_date}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="gen-shift-start">Shift Start *</Label>
+                <Input
+                  id="gen-shift-start"
+                  type="time"
+                  value={generateFormData.shift_start}
+                  onChange={(e) => setGenerateFormData({ ...generateFormData, shift_start: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="gen-shift-end">Shift End *</Label>
+                <Input
+                  id="gen-shift-end"
+                  type="time"
+                  value={generateFormData.shift_end}
+                  onChange={(e) => setGenerateFormData({ ...generateFormData, shift_end: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 p-3 border rounded-md">
+              <input
+                type="checkbox"
+                id="gen-overwrite"
+                checked={generateFormData.overwrite}
+                onChange={(e) => setGenerateFormData({ ...generateFormData, overwrite: e.target.checked })}
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-2 focus:ring-primary"
+              />
+              <Label htmlFor="gen-overwrite" className="text-sm font-normal cursor-pointer">
+                Overwrite existing schedules (deactivate old schedules and create new ones)
+              </Label>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-sm text-blue-800">
+              <p className="font-medium mb-1">📋 Info:</p>
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                <li>This creates date-specific schedules for each day in the selected range</li>
+                <li>Each date gets its own schedule entry (e.g., Jan 1, Jan 2, Jan 3, etc.)</li>
+                <li>Generating for a full month will create up to 30-31 schedules</li>
+                <li>If a specific date already has a schedule, it will be skipped</li>
+                <li>Check "Overwrite" to replace existing schedules for the same dates</li>
+                <li>Day of week will be calculated automatically for each date</li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowGenerateDialog(false)
+                setGenerateMessage(null)
+              }} 
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleBulkGenerate} 
+              disabled={!generateFormData.user_id || !generateFormData.location_id || isSubmitting}
+            >
+              {isSubmitting ? 'Generating...' : 'Generate Schedules'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Schedule Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
@@ -849,23 +1092,6 @@ export default function SchedulesPage() {
               disabled={!editFormData.shift_start || !editFormData.shift_end || isSubmitting}
             >
               {isSubmitting ? 'Updating...' : 'Update Schedule'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-              <p className="text-xs text-muted-foreground">Optional: assign to specific location</p>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddDialog(false)} disabled={isSubmitting}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleAddSchedule} 
-              disabled={!formData.user_id || !formData.schedule_date || isSubmitting}
-            >
-              {isSubmitting ? 'Saving...' : 'Add Schedule'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -29,6 +29,7 @@ export default function JobTemplatesPage() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<JobTemplate | null>(null)
   const [formData, setFormData] = useState({
     area_id: '',
@@ -40,6 +41,17 @@ export default function JobTemplatesPage() {
   })
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [filters, setFilters] = useState({
+    location_id: '',
+    area_id: '',
+    frequency: 'all',
+  })
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [generateFormData, setGenerateFormData] = useState({
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+  })
 
   useEffect(() => {
     fetchLocations()
@@ -200,19 +212,29 @@ export default function JobTemplatesPage() {
   }
 
   const handleGenerateChecklists = async () => {
-    if (!confirm('Generate today\'s checklists? This will create jobs for all active templates.')) return
-
     setSubmitting(true)
     setMessage(null)
     try {
       const response = await fetch('/api/admin/job-checklists/generate', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startDate: generateFormData.startDate,
+          endDate: generateFormData.endDate,
+        }),
       })
 
       const result = await response.json()
 
       if (response.ok) {
-        setMessage({ type: 'success', text: `Generated ${result.count} checklist items for today!` })
+        setShowGenerateModal(false)
+        const dateRange = generateFormData.startDate === generateFormData.endDate
+          ? generateFormData.startDate
+          : `${generateFormData.startDate} to ${generateFormData.endDate}`
+        setMessage({ 
+          type: 'success', 
+          text: `Generated ${result.totalCreated} new checklist(s) for ${dateRange}! (${result.skipped} already existed)` 
+        })
         setTimeout(() => setMessage(null), 5000)
       } else {
         setMessage({ type: 'error', text: result.error?.message || result.error || 'Failed to generate checklists' })
@@ -239,6 +261,37 @@ export default function JobTemplatesPage() {
     return days[day]
   }
 
+  // Filter templates
+  const filteredTemplates = templates.filter(template => {
+    if (filters.location_id && template.office_area?.location?.name) {
+      const location = locations.find(l => l.id === filters.location_id)
+      if (location && template.office_area.location.name !== location.name) return false
+    }
+    if (filters.area_id && template.area_id !== filters.area_id) return false
+    if (filters.frequency !== 'all' && template.frequency !== filters.frequency) return false
+    return true
+  })
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredTemplates.length / pageSize)
+  const startIndex = (currentPage - 1) * pageSize
+  const endIndex = startIndex + pageSize
+  const paginatedTemplates = filteredTemplates.slice(startIndex, endIndex)
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filters])
+
+  // Get areas for selected location
+  const availableAreas = filters.location_id
+    ? locations.find(l => l.id === filters.location_id)?.office_areas || []
+    : locations.flatMap(l => l.office_areas || [])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -256,12 +309,12 @@ export default function JobTemplatesPage() {
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
           <Button 
-            onClick={handleGenerateChecklists} 
+            onClick={() => setShowGenerateModal(true)} 
             variant="outline"
             disabled={submitting}
             className="flex-1 sm:flex-initial"
           >
-            Generate Today's Jobs
+            Generate Jobs
           </Button>
           <Button 
             onClick={() => setShowModal(true)} 
@@ -278,16 +331,77 @@ export default function JobTemplatesPage() {
         </div>
       )}
 
+      {/* Filters */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg">Filters</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="filter-location">Location</Label>
+              <select
+                id="filter-location"
+                value={filters.location_id}
+                onChange={(e) => setFilters({ ...filters, location_id: e.target.value, area_id: '' })}
+                className="w-full p-2 border rounded-md"
+              >
+                <option value="">All Locations</option>
+                {locations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="filter-area">Area</Label>
+              <select
+                id="filter-area"
+                value={filters.area_id}
+                onChange={(e) => setFilters({ ...filters, area_id: e.target.value })}
+                className="w-full p-2 border rounded-md"
+                disabled={!filters.location_id && availableAreas.length === 0}
+              >
+                <option value="">All Areas</option>
+                {availableAreas.map((area) => (
+                  <option key={area.id} value={area.id}>
+                    {area.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="filter-frequency">Frequency</Label>
+              <select
+                id="filter-frequency"
+                value={filters.frequency}
+                onChange={(e) => setFilters({ ...filters, frequency: e.target.value })}
+                className="w-full p-2 border rounded-md"
+              >
+                <option value="all">All Frequencies</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+          </div>
+          <div className="mt-4 text-sm text-muted-foreground">
+            Showing {filteredTemplates.length} of {templates.length} templates
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Mobile Card View */}
       <div className="block lg:hidden space-y-4">
-        {templates.length === 0 ? (
+        {filteredTemplates.length === 0 ? (
           <Card>
             <CardContent className="pt-6 text-center text-muted-foreground">
-              No job templates configured yet
+              {templates.length === 0 ? 'No job templates configured yet' : 'No templates match the current filters'}
             </CardContent>
           </Card>
         ) : (
-          templates.map((template) => (
+          paginatedTemplates.map((template) => (
             <Card key={template.id}>
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -351,6 +465,53 @@ export default function JobTemplatesPage() {
             </Card>
           ))
         )}
+        {/* Mobile Pagination */}
+        {filteredTemplates.length > 0 && totalPages > 1 && (
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Showing {startIndex + 1}-{Math.min(endIndex, filteredTemplates.length)} of {filteredTemplates.length}
+                  </span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value))
+                      setCurrentPage(1)
+                    }}
+                    className="border rounded px-2 py-1 text-sm"
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={25}>25 / page</option>
+                    <option value={50}>50 / page</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm px-3">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Desktop Table View */}
@@ -367,14 +528,14 @@ export default function JobTemplatesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {templates.length === 0 ? (
+            {filteredTemplates.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
-                  No job templates configured yet
+                  {templates.length === 0 ? 'No job templates configured yet' : 'No templates match the current filters'}
                 </TableCell>
               </TableRow>
             ) : (
-              templates.map((template) => (
+              paginatedTemplates.map((template) => (
                 <TableRow key={template.id}>
                   <TableCell>
                     <div>
@@ -441,6 +602,54 @@ export default function JobTemplatesPage() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* Desktop Pagination */}
+      {filteredTemplates.length > 0 && totalPages > 1 && (
+        <Card className="hidden lg:block mt-4">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                Showing {startIndex + 1}-{Math.min(endIndex, filteredTemplates.length)} of {filteredTemplates.length} results
+              </div>
+              <div className="flex items-center gap-4">
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value))
+                    setCurrentPage(1)
+                  }}
+                  className="border rounded px-3 py-1.5 text-sm"
+                >
+                  <option value={10}>10 per page</option>
+                  <option value={25}>25 per page</option>
+                  <option value={50}>50 per page</option>
+                </select>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm px-3">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Add Template Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
@@ -567,6 +776,66 @@ export default function JobTemplatesPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generate Jobs Modal */}
+      <Dialog open={showGenerateModal} onOpenChange={setShowGenerateModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Generate Job Checklists</DialogTitle>
+            <DialogDescription>
+              Create job checklists for active templates. Existing checklists for selected dates will be skipped.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="gen-start-date">Start Date</Label>
+              <Input
+                id="gen-start-date"
+                type="date"
+                value={generateFormData.startDate}
+                onChange={(e) => setGenerateFormData({ ...generateFormData, startDate: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="gen-end-date">End Date</Label>
+              <Input
+                id="gen-end-date"
+                type="date"
+                value={generateFormData.endDate}
+                onChange={(e) => setGenerateFormData({ ...generateFormData, endDate: e.target.value })}
+                min={generateFormData.startDate}
+              />
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-sm text-blue-800">
+              <p className="font-medium mb-1">📋 Generation Info:</p>
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                <li>Only active templates will be processed</li>
+                <li>Existing checklists will be automatically skipped</li>
+                <li>Weekly jobs match the day of week</li>
+                <li>Monthly jobs match the day of month</li>
+              </ul>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button 
+                onClick={handleGenerateChecklists} 
+                disabled={submitting}
+                className="flex-1"
+              >
+                {submitting ? 'Generating...' : 'Generate Checklists'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowGenerateModal(false)}
+                className="flex-1"
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
