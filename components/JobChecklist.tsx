@@ -145,8 +145,17 @@ export default function JobChecklist() {
       const response = await fetch('/api/job-checklists')
       const result = await response.json()
       setJobs(result.data || [])
+      
+      // Log debug info if no jobs found
+      if ((!result.data || result.data.length === 0) && result.debug) {
+        console.log('Debug info:', result.debug)
+        if (result.message) {
+          setMessage({ type: 'error', text: result.message })
+        }
+      }
     } catch (error) {
       console.error('Failed to fetch jobs:', error)
+      setMessage({ type: 'error', text: 'Failed to load jobs' })
     } finally {
       setLoading(false)
     }
@@ -345,17 +354,24 @@ export default function JobChecklist() {
 
   if (jobs.length === 0) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Today's Jobs</CardTitle>
-          <CardDescription>No jobs assigned for today</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            You don't have any scheduled jobs for today. Check back when you're scheduled at a location with job assignments.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        {message && (
+          <div className={`p-4 rounded-md ${message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+            {message.text}
+          </div>
+        )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Today's Jobs</CardTitle>
+            <CardDescription>No jobs assigned for today</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              You don't have any scheduled jobs for today. Check back when you're scheduled at a location with job assignments.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 

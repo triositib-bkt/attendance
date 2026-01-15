@@ -12,12 +12,15 @@ export async function GET(request: Request) {
   }
 
   try {
-    const today = new Date().toISOString().split('T')[0]
+    // Use local date instead of UTC
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      .toISOString().split('T')[0]
     const todayDate = new Date(today)
-    const dayOfWeek = todayDate.getDay()
+    const dayOfWeek = now.getDay() // Use local day of week
     
-    // Get employee's schedule for today (check both date-specific and recurring schedules)
-    const { data: schedules, error: scheduleError } = await supabase
+    // Get all employee's active schedules
+    const { data: allSchedules, error: scheduleError } = await supabase
       .from('employee_schedules')
       .select(`
         *,
@@ -32,14 +35,45 @@ export async function GET(request: Request) {
       `)
       .eq('user_id', session.user.id)
       .eq('is_active', true)
-      .or(`and(day_of_week.eq.${dayOfWeek},or(effective_date.is.null,and(effective_date.lte.${today},or(end_date.is.null,end_date.gte.${today})))),and(day_of_week.is.null,effective_date.lte.${today},end_date.gte.${today})`)
 
     if (scheduleError) {
       return NextResponse.json({ error: scheduleError.message }, { status: 500 })
     }
 
+    // Filter schedules for today in application logic for better clarity
+    const schedules = allSchedules?.filter(schedule => {
+      // Check if schedule is effective today
+      if (schedule.effective_date && new Date(schedule.effective_date) > todayDate) {
+        return false
+      }
+      if (schedule.end_date && new Date(schedule.end_date) < todayDate) {
+        return false
+      }
+
+      // Check if it's a recurring schedule (day_of_week set) or specific date
+      if (schedule.day_of_week !== null) {
+        // Recurring schedule - check if it matches today's day of week
+        return schedule.day_of_week === dayOfWeek
+      } else {
+        // Specific date schedule - must have both effective_date and end_date
+        if (schedule.effective_date && schedule.end_date) {
+          return new Date(schedule.effective_date) <= todayDate && 
+                 new Date(schedule.end_date) >= todayDate
+        }
+        return false
+      }
+    })
+
     if (!schedules || schedules.length === 0) {
-      return NextResponse.json({ data: [], message: 'No schedule for today' })
+      return NextResponse.json({ 
+        data: [], 
+        message: 'No schedule for today',
+        debug: {
+          today,
+          dayOfWeek,
+          totalSchedules: allSchedules?.length || 0
+        }
+      })
     }
 
     // Get location IDs from schedules
@@ -59,7 +93,14 @@ export async function GET(request: Request) {
     const areaIds = areas?.map(a => a.id) || []
 
     if (areaIds.length === 0) {
-      return NextResponse.json({ data: [], message: 'No areas configured for your location' })
+      return NextResponse.json({ 
+        data: [], 
+        message: 'No areas configured for your location',
+        debug: {
+          locationIds,
+          scheduleCount: schedules.length
+        }
+      })
     }
 
     // Get job checklists for these areas for today
@@ -94,7 +135,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: checklistError.message }, { status: 500 })
     }
 
-    return NextResponse.json({ data: checklists || [] })
+    return NextResponse.json({ 
+      data: checklists || [],
+      debug: {
+        today,
+        dayOfWeek,
+        scheduleCount: schedules.length,
+        locationIds,
+        areaCount: areaIds.length,
+        checklistCount: checklists?.length || 0
+      }
+    })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

@@ -26,6 +26,8 @@ export default function JobChecklistsAdminPage() {
     location_id: '',
     status: 'all',
   })
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   useEffect(() => {
     fetchLocations()
@@ -33,6 +35,7 @@ export default function JobChecklistsAdminPage() {
 
   useEffect(() => {
     fetchChecklists()
+    setCurrentPage(1) // Reset to first page when filters change
   }, [filters])
 
   const fetchLocations = async () => {
@@ -72,6 +75,16 @@ export default function JobChecklistsAdminPage() {
       hour: '2-digit',
       minute: '2-digit',
     })
+  }
+
+  // Pagination logic
+  const totalPages = Math.ceil(checklists.length / pageSize)
+  const startIndex = (currentPage - 1) * pageSize
+  const endIndex = startIndex + pageSize
+  const paginatedChecklists = checklists.slice(startIndex, endIndex)
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
   }
 
   if (loading && checklists.length === 0) {
@@ -175,7 +188,7 @@ export default function JobChecklistsAdminPage() {
             </CardContent>
           </Card>
         ) : (
-          checklists.map((checklist) => (
+          paginatedChecklists.map((checklist) => (
             <Card key={checklist.id}>
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -209,9 +222,97 @@ export default function JobChecklistsAdminPage() {
                     )}
                   </div>
                 )}
+                {/* Photos */}
+                {(checklist.start_photo_url || checklist.end_photo_url) && (
+                  <div className="mt-3 pt-3 border-t">
+                    <div className="grid grid-cols-2 gap-3">
+                      {checklist.start_photo_url && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground">Before</p>
+                          <a 
+                            href={checklist.start_photo_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="block"
+                          >
+                            <img
+                              src={checklist.start_photo_url}
+                              alt="Before photo"
+                              className="w-full h-24 object-cover rounded-md border hover:opacity-80 transition-opacity"
+                            />
+                          </a>
+                        </div>
+                      )}
+                      {checklist.end_photo_url && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground">After</p>
+                          <a 
+                            href={checklist.end_photo_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="block"
+                          >
+                            <img
+                              src={checklist.end_photo_url}
+                              alt="After photo"
+                              className="w-full h-24 object-cover rounded-md border hover:opacity-80 transition-opacity"
+                            />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))
+        )}
+        {/* Mobile Pagination */}
+        {checklists.length > 0 && totalPages > 1 && (
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Showing {startIndex + 1}-{Math.min(endIndex, checklists.length)} of {checklists.length}
+                  </span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value))
+                      setCurrentPage(1)
+                    }}
+                    className="border rounded px-2 py-1 text-sm"
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={25}>25 / page</option>
+                    <option value={50}>50 / page</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm px-3">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
 
@@ -226,18 +327,19 @@ export default function JobChecklistsAdminPage() {
               <TableHead>Status</TableHead>
               <TableHead>Completed By</TableHead>
               <TableHead>Completed At</TableHead>
+              <TableHead>Photos</TableHead>
               <TableHead>Notes</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {checklists.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center h-24 text-muted-foreground">
                   No job checklists for this date
                 </TableCell>
               </TableRow>
             ) : (
-              checklists.map((checklist) => (
+              paginatedChecklists.map((checklist) => (
                 <TableRow key={checklist.id}>
                   <TableCell>
                     <div>
@@ -268,6 +370,48 @@ export default function JobChecklistsAdminPage() {
                     {checklist.completed_at ? formatDate(checklist.completed_at) : '-'}
                   </TableCell>
                   <TableCell>
+                    {(checklist.start_photo_url || checklist.end_photo_url) ? (
+                      <div className="flex gap-2">
+                        {checklist.start_photo_url && (
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">Before</p>
+                            <a 
+                              href={checklist.start_photo_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="block"
+                            >
+                              <img
+                                src={checklist.start_photo_url}
+                                alt="Before"
+                                className="w-16 h-16 object-cover rounded border hover:opacity-80 transition-opacity"
+                              />
+                            </a>
+                          </div>
+                        )}
+                        {checklist.end_photo_url && (
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">After</p>
+                            <a 
+                              href={checklist.end_photo_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="block"
+                            >
+                              <img
+                                src={checklist.end_photo_url}
+                                alt="After"
+                                className="w-16 h-16 object-cover rounded border hover:opacity-80 transition-opacity"
+                              />
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
                     <div className="max-w-xs truncate text-sm">
                       {checklist.notes || '-'}
                     </div>
@@ -278,6 +422,54 @@ export default function JobChecklistsAdminPage() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* Desktop Pagination */}
+      {checklists.length > 0 && totalPages > 1 && (
+        <Card className="hidden lg:block mt-4">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                Showing {startIndex + 1}-{Math.min(endIndex, checklists.length)} of {checklists.length} results
+              </div>
+              <div className="flex items-center gap-4">
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value))
+                    setCurrentPage(1)
+                  }}
+                  className="border rounded px-3 py-1.5 text-sm"
+                >
+                  <option value={10}>10 per page</option>
+                  <option value={25}>25 per page</option>
+                  <option value={50}>50 per page</option>
+                </select>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm px-3">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

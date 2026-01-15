@@ -23,6 +23,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('userId')
+  const locationId = searchParams.get('location_id')
   const year = searchParams.get('year')
   const month = searchParams.get('month')
 
@@ -45,6 +46,10 @@ export async function GET(request: Request) {
 
   if (userId) {
     query = query.eq('user_id', userId)
+  }
+
+  if (locationId) {
+    query = query.eq('location_id', locationId)
   }
 
   // Filter by year and month if provided

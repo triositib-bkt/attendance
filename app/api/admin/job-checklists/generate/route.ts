@@ -3,7 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { NextResponse } from 'next/server'
 
-// POST generate job checklists for today
+// POST generate job checklists for a date or date range
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   
@@ -17,15 +17,49 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Call the PostgreSQL function to generate checklists
-    const { data, error } = await supabase
-      .rpc('generate_daily_checklists')
+    const body = await request.json()
+    const { startDate, endDate } = body
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    const start = startDate || new Date().toISOString().split('T')[0]
+    const end = endDate || start
+
+    // Validate dates
+    if (new Date(start) > new Date(end)) {
+      return NextResponse.json({ error: 'Start date must be before or equal to end date' }, { status: 400 })
     }
 
-    return NextResponse.json({ count: data, error: null })
+    let totalCreated = 0
+    let totalSkipped = 0
+    const currentDate = new Date(start)
+    const endDateObj = new Date(end)
+
+    // Generate checklists for each date in the range
+    while (currentDate <= endDateObj) {
+      const dateString = currentDate.toISOString().split('T')[0]
+      
+      const { data, error } = await supabase
+        .rpc('generate_daily_checklists', { target_date: dateString })
+
+      if (error) {
+        console.error(`Error generating for ${dateString}:`, error)
+      } else {
+        totalCreated += data || 0
+        // Count skipped by checking existing checklists
+        const { count } = await supabase
+          .from('job_checklists')
+          .select('*', { count: 'exact', head: true })
+          .eq('assigned_date', dateString)
+        totalSkipped += (count || 0) - (data || 0)
+      }
+
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
+
+    return NextResponse.json({ 
+      totalCreated, 
+      skipped: Math.max(0, totalSkipped),
+      error: null 
+    })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
