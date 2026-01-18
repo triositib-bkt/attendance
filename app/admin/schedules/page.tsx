@@ -730,17 +730,27 @@ export default function SchedulesPage() {
               Previous
             </Button>
             <div className="flex gap-1">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <Button
-                  key={page}
-                  variant={currentPage === page ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => handlePageChange(page)}
-                  className="w-9"
-                >
-                  {page}
-                </Button>
-              ))}
+              {(() => {
+                const maxButtons = 4
+                let startPage = Math.max(1, currentPage - 1)
+                let endPage = Math.min(totalPages, startPage + maxButtons - 1)
+                
+                if (endPage - startPage < maxButtons - 1) {
+                  startPage = Math.max(1, endPage - maxButtons + 1)
+                }
+                
+                return Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i).map((page) => (
+                  <Button
+                    key={page}
+                    variant={currentPage === page ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => handlePageChange(page)}
+                    className="w-9"
+                  >
+                    {page}
+                  </Button>
+                ))
+              })()}
             </div>
             <Button
               variant="outline"
