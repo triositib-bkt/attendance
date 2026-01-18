@@ -12,12 +12,16 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Use local date instead of UTC
+    // Use local date - avoid toISOString() which converts to UTC
     const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      .toISOString().split('T')[0]
-    const todayDate = new Date(today)
-    const dayOfWeek = now.getDay() // Use local day of week
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    const today = `${year}-${month}-${day}`
+    const dayOfWeek = now.getDay()
+    
+    // Create a date object for comparison
+    const todayDate = new Date(year, now.getMonth(), now.getDate())
     
     // Get all employee's active schedules
     const { data: allSchedules, error: scheduleError } = await supabase
@@ -40,39 +44,63 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: scheduleError.message }, { status: 500 })
     }
 
-    // Filter schedules for today in application logic for better clarity
-    const schedules = allSchedules?.filter(schedule => {
-      // Check if schedule is effective today
-      if (schedule.effective_date && new Date(schedule.effective_date) > todayDate) {
-        return false
-      }
-      if (schedule.end_date && new Date(schedule.end_date) < todayDate) {
-        return false
-      }
+    console.log('=== Schedule Check ===')
+    console.log('Today:', today)
+    console.log('Day of Week:', dayOfWeek)
+    console.log('Total schedules found:', allSchedules?.length || 0)
 
-      // Check if it's a recurring schedule (day_of_week set) or specific date
-      if (schedule.day_of_week !== null) {
-        // Recurring schedule - check if it matches today's day of week
-        return schedule.day_of_week === dayOfWeek
-      } else {
-        // Specific date schedule - must have both effective_date and end_date
-        if (schedule.effective_date && schedule.end_date) {
-          return new Date(schedule.effective_date) <= todayDate && 
-                 new Date(schedule.end_date) >= todayDate
-        }
-        return false
+    // Helper function to parse dates as local dates (not UTC)
+    const parseLocalDate = (dateStr: string) => {
+      const [year, month, day] = dateStr.split('-').map(Number)
+      return new Date(year, month - 1, day)
+    }
+
+    // Filter schedules for today - only check date range, not day of week
+    const schedules = allSchedules?.filter(schedule => {
+      // Check if today falls within the schedule's date range
+      const effectiveOk = !schedule.effective_date || parseLocalDate(schedule.effective_date) <= todayDate
+      const endOk = !schedule.end_date || parseLocalDate(schedule.end_date) >= todayDate
+      
+      const matched = effectiveOk && endOk
+      
+      // Only log matched schedules
+      if (matched) {
+        console.log(`✓ Matched Schedule ${schedule.id}:`, {
+          effective_date: schedule.effective_date,
+          end_date: schedule.end_date,
+          location_id: schedule.location_id,
+          location_name: schedule.work_location?.name
+        })
+      }
+      
+      return matched
+    })
+
+    console.log('Matched schedules:', schedules?.length || 0)
+
+    // Add detailed debug for why schedules didn't match
+    const scheduleDebug = allSchedules?.map(s => {
+      const effectiveOk = !s.effective_date || parseLocalDate(s.effective_date) <= todayDate
+      const endOk = !s.end_date || parseLocalDate(s.end_date) >= todayDate
+      const dayMatch = s.day_of_week === dayOfWeek
+      
+      return {
+        id: s.id,
+        day_of_week: s.day_of_week,
+        effective_date: s.effective_date,
+        end_date: s.end_date,
+        location_id: s.location_id,
+        effectiveOk,
+        endOk,
+        dayMatch,
+        matched: effectiveOk && endOk && dayMatch
       }
     })
 
     if (!schedules || schedules.length === 0) {
       return NextResponse.json({ 
         data: [], 
-        message: 'No schedule for today',
-        debug: {
-          today,
-          dayOfWeek,
-          totalSchedules: allSchedules?.length || 0
-        }
+        message: 'No schedule for today'
       })
     }
 
@@ -95,11 +123,7 @@ export async function GET(request: Request) {
     if (areaIds.length === 0) {
       return NextResponse.json({ 
         data: [], 
-        message: 'No areas configured for your location',
-        debug: {
-          locationIds,
-          scheduleCount: schedules.length
-        }
+        message: 'No areas configured for your location'
       })
     }
 
@@ -135,17 +159,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: checklistError.message }, { status: 500 })
     }
 
-    return NextResponse.json({ 
-      data: checklists || [],
-      debug: {
-        today,
-        dayOfWeek,
-        scheduleCount: schedules.length,
-        locationIds,
-        areaCount: areaIds.length,
-        checklistCount: checklists?.length || 0
-      }
-    })
+    return NextResponse.json({ data: checklists || [] })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

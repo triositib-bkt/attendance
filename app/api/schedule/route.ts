@@ -14,41 +14,42 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Get current day of week and date
+  // Use local date - avoid toISOString() which converts to UTC
   const now = new Date()
-  const dayOfWeek = now.getDay()
-  const today = now.toISOString().split('T')[0] // YYYY-MM-DD
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  const today = `${year}-${month}-${day}`
+  const todayDate = new Date(year, now.getMonth(), now.getDate())
 
-  // Get today's schedule - use admin client to bypass RLS
+  // Helper function to parse dates as local dates (not UTC)
+  const parseLocalDate = (dateStr: string) => {
+    const [year, month, day] = dateStr.split('-').map(Number)
+    return new Date(year, month - 1, day)
+  }
+
+  // Get all active schedules - use admin client to bypass RLS
   const { data: schedules } = await supabaseAdmin
     .from('employee_schedules')
     .select('*, work_locations:location_id(id, name)')
     .eq('user_id', session.user.id)
-    .eq('day_of_week', dayOfWeek)
     .eq('is_active', true)
 
   if (!schedules || schedules.length === 0) {
     return NextResponse.json({ data: null, error: null })
   }
 
-  // Filter and prioritize schedules:
-  // 1. Date-specific schedules within range
-  // 2. Recurring schedules (no dates)
-  const dateSpecificSchedules = schedules.filter(s => {
-    if (!s.effective_date) return false
-    const effectiveDate = new Date(s.effective_date)
-    const endDate = s.end_date ? new Date(s.end_date) : null
-    const currentDate = new Date(today)
+  // Filter schedules for today - only check date range
+  const todaySchedules = schedules.filter(schedule => {
+    // Check if today falls within the schedule's date range
+    const effectiveOk = !schedule.effective_date || parseLocalDate(schedule.effective_date) <= todayDate
+    const endOk = !schedule.end_date || parseLocalDate(schedule.end_date) >= todayDate
     
-    return currentDate >= effectiveDate && (!endDate || currentDate <= endDate)
+    return effectiveOk && endOk
   })
 
-  const recurringSchedules = schedules.filter(s => !s.effective_date)
-
-  // Return date-specific schedule if exists, otherwise recurring schedule
-  const schedule = dateSpecificSchedules.length > 0 
-    ? dateSpecificSchedules[0] 
-    : recurringSchedules[0]
+  // Return the first matching schedule
+  const schedule = todaySchedules.length > 0 ? todaySchedules[0] : null
 
   return NextResponse.json(
     { data: schedule || null, error: null },

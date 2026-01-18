@@ -146,12 +146,9 @@ export default function JobChecklist() {
       const result = await response.json()
       setJobs(result.data || [])
       
-      // Log debug info if no jobs found
-      if ((!result.data || result.data.length === 0) && result.debug) {
-        console.log('Debug info:', result.debug)
-        if (result.message) {
-          setMessage({ type: 'error', text: result.message })
-        }
+      // Clear any previous error messages when jobs load successfully
+      if (result.data && result.data.length > 0) {
+        setMessage(null)
       }
     } catch (error) {
       console.error('Failed to fetch jobs:', error)
