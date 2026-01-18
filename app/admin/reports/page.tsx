@@ -63,6 +63,7 @@ export default function ReportsPage() {
   const [month, setMonth] = useState(format(new Date(), 'yyyy-MM'))
   const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
   const [endDate, setEndDate] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'))
+  const [includeEmployeeInExport, setIncludeEmployeeInExport] = useState(true)
 
   useEffect(() => {
     if (activeTab === 'attendance') {
@@ -149,10 +150,14 @@ export default function ReportsPage() {
             `"${checklist.template_name}"`,
             ...checklist.completions.map(c => {
               if (c.completed) {
-                const employeeName = c.completed_by_name || 'Unknown'
-                const employeeId = c.completed_by_employee_id || ''
-                const time = c.completed_at ? format(new Date(c.completed_at), 'HH:mm') : ''
-                return `"✓ ${employeeName} (${employeeId}) ${time}"`
+                if (includeEmployeeInExport) {
+                  const employeeName = c.completed_by_name || 'Unknown'
+                  const employeeId = c.completed_by_employee_id || ''
+                  const time = c.completed_at ? format(new Date(c.completed_at), 'HH:mm') : ''
+                  return `"✓ ${employeeName} (${employeeId}) ${time}"`
+                } else {
+                  return '✓'
+                }
               }
               return '✗'
             })
@@ -423,11 +428,16 @@ export default function ReportsPage() {
                                   return (
                                     <td key={day.toISOString()} className="px-3 py-3 text-center">
                                       {completion?.completed ? (
-                                        <div 
-                                          className="inline-flex items-center justify-center w-8 h-8 bg-green-100 rounded-full cursor-help" 
-                                          title={`Completed by: ${completion.completed_by_name || 'Unknown'} (${completion.completed_by_employee_id || 'N/A'})\nTime: ${completion.completed_at ? format(new Date(completion.completed_at), 'HH:mm') : 'N/A'}`}
-                                        >
-                                          <span className="text-green-600 text-lg">✓</span>
+                                        <div className="inline-flex flex-col items-center">
+                                          <div 
+                                            className="inline-flex items-center justify-center w-8 h-8 bg-green-100 rounded-full cursor-help mb-1" 
+                                            title={`Completed by: ${completion.completed_by_name || 'Unknown'} (${completion.completed_by_employee_id || 'N/A'})\nTime: ${completion.completed_at ? format(new Date(completion.completed_at), 'HH:mm') : 'N/A'}`}
+                                          >
+                                            <span className="text-green-600 text-lg">✓</span>
+                                          </div>
+                                          <span className="text-xs text-gray-600 font-medium">
+                                            {completion.completed_by_name || 'Unknown'}
+                                          </span>
                                         </div>
                                       ) : (
                                         <div className="inline-flex items-center justify-center w-8 h-8 bg-red-100 rounded-full" title="Not completed">
@@ -448,7 +458,16 @@ export default function ReportsPage() {
               ))}
               
               {/* Export Button */}
-              <div className="flex justify-end">
+              <div className="flex items-center justify-end gap-4">
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={includeEmployeeInExport}
+                    onChange={(e) => setIncludeEmployeeInExport(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Include employee names in CSV
+                </label>
                 <button
                   onClick={exportToExcel}
                   className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-medium transition-colors"
