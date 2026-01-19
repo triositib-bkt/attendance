@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns'
+import * as XLSX from 'xlsx'
 
 type ReportTab = 'attendance' | 'checklist'
 
@@ -134,27 +135,29 @@ export default function ReportsPage() {
     if (checklistReportData.length === 0) return
 
     const days = getDaysInRange()
-    let csvContent = 'data:text/csv;charset=utf-8,'
+    
+    // Create worksheet data
+    const wsData: any[][] = []
     
     // Header row
     const headers = ['Location', 'Area', 'Checklist', ...days.map(d => format(d, 'MMM d'))]
-    csvContent += headers.join(',') + '\n'
+    wsData.push(headers)
 
     // Data rows
     checklistReportData.forEach(location => {
       location.areas.forEach(area => {
         area.checklists.forEach(checklist => {
           const row = [
-            `"${location.location_name}"`,
-            `"${area.area_name}"`,
-            `"${checklist.template_name}"`,
+            location.location_name,
+            area.area_name,
+            checklist.template_name,
             ...checklist.completions.map(c => {
               if (c.completed) {
                 if (includeEmployeeInExport) {
                   const employeeName = c.completed_by_name || 'Unknown'
                   const employeeId = c.completed_by_employee_id || ''
                   const time = c.completed_at ? format(new Date(c.completed_at), 'HH:mm') : ''
-                  return `"✓ ${employeeName} (${employeeId}) ${time}"`
+                  return `✓ ${employeeName} (${employeeId}) ${time}`
                 } else {
                   return '✓'
                 }
@@ -162,18 +165,26 @@ export default function ReportsPage() {
               return '✗'
             })
           ]
-          csvContent += row.join(',') + '\n'
+          wsData.push(row)
         })
       })
     })
 
-    const encodedUri = encodeURI(csvContent)
-    const link = document.createElement('a')
-    link.setAttribute('href', encodedUri)
-    link.setAttribute('download', `checklist-report-${startDate}-to-${endDate}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet(wsData)
+    
+    // Set column widths
+    const colWidths = [
+      { wch: 20 }, // Location
+      { wch: 20 }, // Area
+      { wch: 30 }, // Checklist
+      ...days.map(() => ({ wch: 15 })) // Days
+    ]
+    ws['!cols'] = colWidths
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Checklist Report')
+    XLSX.writeFile(wb, `checklist-report-${startDate}-to-${endDate}.xlsx`)
   }
 
   return (
@@ -319,10 +330,57 @@ export default function ReportsPage() {
               {/* Export Button */}
               <div className="mt-6 flex justify-end">
                 <button
-                  onClick={() => alert('Export functionality would be implemented here')}
+                  onClick={() => {
+                    if (!reportData?.employees || reportData.employees.length === 0) {
+                      alert('No data to export')
+                      return
+                    }
+                    
+                    // Create worksheet data
+                    const wsData: any[][] = []
+                    wsData.push(['Employee ID', 'Name', 'Department', 'Days Present', 'Total Hours', 'Avg Hours/Day'])
+                    
+                    reportData.employees.forEach(emp => {
+                      wsData.push([
+                        emp.employee_id || '-',
+                        emp.full_name,
+                        emp.department || '-',
+                        emp.days_present,
+                        emp.total_hours,
+                        emp.avg_hours
+                      ])
+                    })
+                    
+                    // Add summary at the top
+                    const summaryData = [
+                      ['Monthly Attendance Report'],
+                      ['Month:', month],
+                      ['Total Employees:', reportData.totalEmployees],
+                      ['Average Attendance:', `${reportData.avgAttendance}%`],
+                      ['Total Working Hours:', `${reportData.totalHours}h`],
+                      [],
+                      ...wsData
+                    ]
+                    
+                    const wb = XLSX.utils.book_new()
+                    const ws = XLSX.utils.aoa_to_sheet(summaryData)
+                    
+                    // Set column widths
+                    ws['!cols'] = [
+                      { wch: 15 },
+                      { wch: 25 },
+                      { wch: 20 },
+                      { wch: 15 },
+                      { wch: 15 },
+                      { wch: 15 }
+                    ]
+                    
+                    XLSX.utils.book_append_sheet(wb, ws, 'Attendance Report')
+                    XLSX.writeFile(wb, `attendance-report-${month}.xlsx`)
+                  }}
                   className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-medium transition-colors"
                 >
-                  📥 Export to CSV
+                  📥 Export to Excel
                 </button>
               </div>
             </>
@@ -466,13 +524,13 @@ export default function ReportsPage() {
                     onChange={(e) => setIncludeEmployeeInExport(e.target.checked)}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
-                  Include employee names in CSV
+                  Include employee names in Excel
                 </label>
                 <button
                   onClick={exportToExcel}
                   className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-medium transition-colors"
                 >
-                  📥 Export to CSV
+                  📥 Export to Excel
                 </button>
               </div>
             </div>
