@@ -18,22 +18,56 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const month = searchParams.get('month') || new Date().toISOString().slice(0, 7)
+  const userId = searchParams.get('userId')
 
   const startDate = startOfMonth(new Date(month + '-01'))
   const endDate = endOfMonth(new Date(month + '-01'))
 
-  // Get all active employees
-  const { data: employees } = await supabase
+  // Get all active employees (or specific employee if userId is provided)
+  let employeesQuery = supabase
     .from('profiles')
     .select('id, full_name, employee_id, department')
     .eq('is_active', true)
+  
+  if (userId) {
+    employeesQuery = employeesQuery.eq('id', userId)
+  }
+  
+  const { data: employees } = await employeesQuery
 
-  // Get attendance records for the month
-  const { data: attendance } = await supabase
+  // Get attendance records for the month (filtered by userId if provided)
+  let attendanceQuery = supabase
     .from('attendance')
     .select('*')
     .gte('check_in', startDate.toISOString())
     .lte('check_in', endDate.toISOString())
+  
+  if (userId) {
+    attendanceQuery = attendanceQuery.eq('user_id', userId)
+  }
+  
+  const { data: attendance } = await attendanceQuery
+
+  // Get attendance with user details for detailed view
+  let detailedAttendanceQuery = supabase
+    .from('attendance')
+    .select(`
+      *,
+      profiles:user_id (
+        full_name,
+        employee_id,
+        department
+      )
+    `)
+    .gte('check_in', startDate.toISOString())
+    .lte('check_in', endDate.toISOString())
+    .order('check_in', { ascending: false })
+  
+  if (userId) {
+    detailedAttendanceQuery = detailedAttendanceQuery.eq('user_id', userId)
+  }
+  
+  const { data: detailedAttendance } = await detailedAttendanceQuery
 
   // Calculate statistics
   const employeeStats = employees?.map(emp => {
@@ -66,7 +100,8 @@ export async function GET(request: Request) {
       totalEmployees,
       avgAttendance,
       totalHours: Math.round(totalHours * 10) / 10,
-      employees: employeeStats
+      employees: employeeStats,
+      attendanceRecords: detailedAttendance
     }
   })
 }
