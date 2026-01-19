@@ -16,11 +16,24 @@ interface EmployeeStats {
   avg_hours: number
 }
 
+interface AttendanceRecord {
+  id: string
+  user_id: string
+  check_in: string
+  check_out: string | null
+  profiles: {
+    full_name: string
+    employee_id: string
+    department: string | null
+  }
+}
+
 interface ReportData {
   totalEmployees: number
   avgAttendance: number
   totalHours: number
   employees: EmployeeStats[]
+  attendanceRecords?: AttendanceRecord[]
 }
 
 interface ChecklistCompletion {
@@ -53,12 +66,21 @@ interface Location {
   name: string
 }
 
+interface Employee {
+  id: string
+  full_name: string
+  employee_id: string
+  department: string | null
+}
+
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<ReportTab>('attendance')
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [checklistReportData, setChecklistReportData] = useState<LocationAreaReport[]>([])
   const [locations, setLocations] = useState<Location[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([])
   const [selectedLocation, setSelectedLocation] = useState<string>('')
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [checklistLoading, setChecklistLoading] = useState(false)
   const [month, setMonth] = useState(format(new Date(), 'yyyy-MM'))
@@ -68,17 +90,28 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (activeTab === 'attendance') {
+      fetchEmployees()
       fetchReport()
     } else if (activeTab === 'checklist') {
       fetchLocations()
     }
-  }, [month, activeTab])
+  }, [month, selectedEmployee, activeTab])
 
   useEffect(() => {
     if (activeTab === 'checklist' && selectedLocation) {
       fetchChecklistReport()
     }
   }, [startDate, endDate, selectedLocation, activeTab])
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await fetch('/api/admin/employees')
+      const result = await response.json()
+      setEmployees(result.data || [])
+    } catch (error) {
+      console.error('Failed to fetch employees:', error)
+    }
+  }
 
   const fetchLocations = async () => {
     try {
@@ -96,7 +129,11 @@ export default function ReportsPage() {
   const fetchReport = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/admin/reports?month=${month}`)
+      const params = new URLSearchParams({ month })
+      if (selectedEmployee) {
+        params.append('userId', selectedEmployee)
+      }
+      const response = await fetch(`/api/admin/reports?${params.toString()}`)
       const result = await response.json()
       setReportData(result.data)
     } catch (error) {
@@ -227,14 +264,31 @@ export default function ReportsPage() {
             <div>
               <h2 className="text-xl font-semibold text-gray-900">Monthly Attendance</h2>
             </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Month:</label>
-              <input
-                type="month"
-                value={month}
-                onChange={(e) => setMonth(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Employee:</label>
+                <select
+                  value={selectedEmployee}
+                  onChange={(e) => setSelectedEmployee(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-[200px]"
+                >
+                  <option value="">All Employees</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.full_name} {emp.employee_id ? `(${emp.employee_id})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Month:</label>
+                <input
+                  type="month"
+                  value={month}
+                  onChange={(e) => setMonth(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
             </div>
           </div>
 
@@ -262,10 +316,10 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* Employee Details Table */}
+              {/* Detailed Attendance Records Table */}
               <div className="bg-white rounded-lg shadow overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200">
-                  <h2 className="text-lg font-semibold text-gray-900">Employee Details</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Detailed Attendance Records</h2>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
@@ -281,46 +335,51 @@ export default function ReportsPage() {
                           Department
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Days Present
+                          Check In
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Total Hours
+                          Check Out
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Avg Hours/Day
+                          Hours Worked
                         </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {reportData?.employees?.length === 0 ? (
+                      {!reportData?.attendanceRecords || reportData.attendanceRecords.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                            No data available for this month
+                            No attendance records for this month
                           </td>
                         </tr>
                       ) : (
-                        reportData?.employees?.map((emp) => (
-                          <tr key={emp.id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {emp.employee_id || '-'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {emp.full_name}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {emp.department || '-'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {emp.days_present}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {emp.total_hours}h
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {emp.avg_hours}h
-                            </td>
-                          </tr>
-                        ))
+                        reportData.attendanceRecords.map((record) => {
+                          const hours = record.check_out 
+                            ? ((new Date(record.check_out).getTime() - new Date(record.check_in).getTime()) / (1000 * 60 * 60)).toFixed(1)
+                            : '-'
+                          return (
+                            <tr key={record.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {record.profiles.employee_id || '-'}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {record.profiles.full_name}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {record.profiles.department || '-'}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {format(new Date(record.check_in), 'MMM d, yyyy HH:mm')}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {record.check_out ? format(new Date(record.check_out), 'MMM d, yyyy HH:mm') : 'Not checked out'}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {hours !== '-' ? `${hours}h` : '-'}
+                              </td>
+                            </tr>
+                          )
+                        })
                       )}
                     </tbody>
                   </table>
@@ -336,12 +395,22 @@ export default function ReportsPage() {
                       return
                     }
                     
-                    // Create worksheet data
-                    const wsData: any[][] = []
-                    wsData.push(['Employee ID', 'Name', 'Department', 'Days Present', 'Total Hours', 'Avg Hours/Day'])
+                    const wb = XLSX.utils.book_new()
+                    
+                    // Summary Report Sheet
+                    const summaryData: any[][] = [
+                      ['Monthly Attendance Summary Report'],
+                      ['Month:', month],
+                      ['Employee Filter:', selectedEmployee ? employees.find(e => e.id === selectedEmployee)?.full_name || 'N/A' : 'All Employees'],
+                      ['Total Employees:', reportData.totalEmployees],
+                      ['Average Attendance:', `${reportData.avgAttendance}%`],
+                      ['Total Working Hours:', `${reportData.totalHours}h`],
+                      [],
+                      ['Employee ID', 'Name', 'Department', 'Days Present', 'Total Hours', 'Avg Hours/Day']
+                    ]
                     
                     reportData.employees.forEach(emp => {
-                      wsData.push([
+                      summaryData.push([
                         emp.employee_id || '-',
                         emp.full_name,
                         emp.department || '-',
@@ -351,22 +420,8 @@ export default function ReportsPage() {
                       ])
                     })
                     
-                    // Add summary at the top
-                    const summaryData = [
-                      ['Monthly Attendance Report'],
-                      ['Month:', month],
-                      ['Total Employees:', reportData.totalEmployees],
-                      ['Average Attendance:', `${reportData.avgAttendance}%`],
-                      ['Total Working Hours:', `${reportData.totalHours}h`],
-                      [],
-                      ...wsData
-                    ]
-                    
-                    const wb = XLSX.utils.book_new()
-                    const ws = XLSX.utils.aoa_to_sheet(summaryData)
-                    
-                    // Set column widths
-                    ws['!cols'] = [
+                    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData)
+                    wsSummary['!cols'] = [
                       { wch: 15 },
                       { wch: 25 },
                       { wch: 20 },
@@ -374,8 +429,44 @@ export default function ReportsPage() {
                       { wch: 15 },
                       { wch: 15 }
                     ]
+                    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary Report')
                     
-                    XLSX.utils.book_append_sheet(wb, ws, 'Attendance Report')
+                    // Detailed Attendance Records Sheet
+                    if (reportData.attendanceRecords && reportData.attendanceRecords.length > 0) {
+                      const detailedData: any[][] = [
+                        ['Detailed Attendance Records'],
+                        ['Month:', month],
+                        ['Employee Filter:', selectedEmployee ? employees.find(e => e.id === selectedEmployee)?.full_name || 'N/A' : 'All Employees'],
+                        [],
+                        ['Employee ID', 'Name', 'Department', 'Check In', 'Check Out', 'Hours Worked']
+                      ]
+                      
+                      reportData.attendanceRecords.forEach(record => {
+                        const hours = record.check_out 
+                          ? ((new Date(record.check_out).getTime() - new Date(record.check_in).getTime()) / (1000 * 60 * 60)).toFixed(1)
+                          : '-'
+                        detailedData.push([
+                          record.profiles.employee_id || '-',
+                          record.profiles.full_name,
+                          record.profiles.department || '-',
+                          format(new Date(record.check_in), 'MMM d, yyyy HH:mm'),
+                          record.check_out ? format(new Date(record.check_out), 'MMM d, yyyy HH:mm') : 'Not checked out',
+                          hours !== '-' ? `${hours}h` : '-'
+                        ])
+                      })
+                      
+                      const wsDetailed = XLSX.utils.aoa_to_sheet(detailedData)
+                      wsDetailed['!cols'] = [
+                        { wch: 15 },
+                        { wch: 25 },
+                        { wch: 20 },
+                        { wch: 20 },
+                        { wch: 20 },
+                        { wch: 15 }
+                      ]
+                      XLSX.utils.book_append_sheet(wb, wsDetailed, 'Detailed Records')
+                    }
+                    
                     XLSX.writeFile(wb, `attendance-report-${month}.xlsx`)
                   }}
                   className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-medium transition-colors"
