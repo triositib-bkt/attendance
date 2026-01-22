@@ -3,11 +3,7 @@ const CACHE_VERSION = 'v' + Date.now()
 const CACHE_NAME = 'attendance-system-' + CACHE_VERSION
 const urlsToCache = [
   '/',
-  '/dashboard',
-  '/login',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png'
+  '/manifest.json'
 ]
 
 // Install service worker and cache resources

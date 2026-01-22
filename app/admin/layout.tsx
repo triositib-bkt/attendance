@@ -288,6 +288,18 @@ export default function AdminLayout({
                     </div>
                   )}
                 </div>
+
+                {/* Notifications Link */}
+                <Link
+                  href="/admin/notifications"
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    isActive('/admin/notifications')
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-foreground hover:bg-accent hover:text-accent-foreground'
+                  }`}
+                >
+                  Notifications
+                </Link>
               </div>
             </div>
             
@@ -417,6 +429,17 @@ export default function AdminLayout({
                   }`}
                 >
                   ✅ Job Checklists
+                </Link>
+                <Link
+                  href="/admin/notifications"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-colors ${
+                    isActive('/admin/notifications')
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-foreground hover:bg-accent hover:text-accent-foreground'
+                  }`}
+                >
+                  🔔 Notifications
                 </Link>
                 
                 {/* Mobile user info and logout */}
