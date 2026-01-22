@@ -70,17 +70,42 @@ export async function getFCMToken(): Promise<string | null> {
         }
 
         const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-          scope: '/'
+          scope: '/',
+          updateViaCache: 'none'
         })
+        
+        // Wait for service worker to be ready
         await navigator.serviceWorker.ready
         
+        // Get the registration again to ensure it's fresh
+        const readyRegistration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js')
+        
+        if (!readyRegistration) {
+          console.warn('Service worker registration not found after ready')
+          return null
+        }
+        
         // Verify registration has pushManager
-        if (!registration.pushManager) {
+        if (!readyRegistration.pushManager) {
           console.warn('Service worker registration missing pushManager')
           return null
         }
         
         console.log('✅ Service Worker registered successfully')
+        
+        // Longer delay for production
+        await new Promise(resolve => setTimeout(resolve, 1500))
+        
+        // Get messaging with the verified registration
+        const messaging = getMessaging(app)
+        const token = await getToken(messaging, {
+          vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+          serviceWorkerRegistration: readyRegistration
+        })
+        
+        console.log('✅ FCM token obtained successfully')
+        return token
+        
       } catch (swError) {
         console.warn('Service worker registration failed:', swError)
         return null
@@ -89,17 +114,6 @@ export async function getFCMToken(): Promise<string | null> {
       console.warn('Service workers not supported')
       return null
     }
-    
-    // Small delay to ensure service worker is fully active
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    const messaging = getMessaging(app)
-    const token = await getToken(messaging, {
-      vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
-    })
-    
-    console.log('✅ FCM token obtained successfully')
-    return token
   } catch (error: any) {
     // Silently fail - notifications are optional
     console.info('ℹ️ Push notifications unavailable:', error?.code || error?.message)
