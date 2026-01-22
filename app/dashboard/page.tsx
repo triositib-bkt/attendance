@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { supabase } from '@/lib/supabase'
+import { getFCMToken, onMessageListener } from '@/lib/firebase'
 import AttendanceButton from '@/components/AttendanceButton'
 import AttendanceHistory from '@/components/AttendanceHistory'
 import JobChecklist from '@/components/JobChecklist'
@@ -20,6 +21,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [hasCheckedSession, setHasCheckedSession] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('checkin')
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default')
+  const [showNotificationBanner, setShowNotificationBanner] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const router = useRouter()
 
   const fetchProfile = useCallback(async () => {
@@ -36,6 +40,62 @@ export default function DashboardPage() {
     }
     setLoading(false)
   }, [session?.user?.id])
+
+  const fetchUnreadCount = useCallback(async () => {
+    if (!session?.user?.id) return
+    
+    try {
+      const response = await fetch('/api/notifications/unread-count')
+      const result = await response.json()
+      setUnreadCount(result.count || 0)
+    } catch (error) {
+      console.error('Failed to fetch unread count:', error)
+    }
+  }, [session?.user?.id])
+
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) {
+      alert('This browser does not support notifications')
+      return
+    }
+
+    try {
+      const permission = await Notification.requestPermission()
+      setNotificationPermission(permission)
+      
+      if (permission === 'granted') {
+        setShowNotificationBanner(false)
+        
+        // Try to get FCM token and register it (optional - may fail)
+        const token = await getFCMToken()
+        if (token) {
+          try {
+            await fetch('/api/notifications/fcm-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                token,
+                device_type: 'web',
+                device_info: navigator.userAgent
+              })
+            })
+            alert('✅ Push notifications enabled! You will receive updates from management.')
+          } catch (err) {
+            console.error('Failed to register FCM token:', err)
+            alert('✅ Notifications enabled! (In-app notifications only)')
+          }
+        } else {
+          // FCM not available, but browser notifications still work
+          alert('✅ Notifications enabled! (In-app notifications only)')
+        }
+      } else if (permission === 'denied') {
+        setShowNotificationBanner(false)
+        alert('⚠️ Notifications blocked. You can enable them in your browser settings.')
+      }
+    } catch (error) {
+      console.error('Error requesting notification permission:', error)
+    }
+  }
 
   useEffect(() => {
     if (status === 'loading') {
@@ -59,6 +119,48 @@ export default function DashboardPage() {
     }
   }, [session?.user?.id, session?.user?.role, status, fetchProfile, router])
 
+  // Check notification permission on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotificationPermission(Notification.permission)
+      
+      // Show banner if permission not granted
+      if (Notification.permission === 'default') {
+        setShowNotificationBanner(true)
+      }
+    }
+  }, [])
+
+  // Fetch unread count on mount and periodically
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetchUnreadCount()
+      // Refresh every 30 seconds
+      const interval = setInterval(fetchUnreadCount, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [session?.user?.id, fetchUnreadCount])
+
+  // Listen for foreground FCM messages
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    onMessageListener()
+      .then((payload: any) => {
+        console.log('Received foreground message:', payload)
+        // Show notification
+        if (payload.notification) {
+          new Notification(payload.notification.title, {
+            body: payload.notification.body,
+            icon: '/icon-192x192.png'
+          })
+        }
+        // Refresh notifications list and unread count
+        fetchUnreadCount()
+      })
+      .catch((err) => console.error('Failed to receive message:', err))
+  }, [])
+
   const handleLogout = async () => {
     await signOut({ callbackUrl: '/login' })
   }
@@ -73,6 +175,36 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+      {/* Notification Permission Banner */}
+      {showNotificationBanner && (
+        <div className="bg-blue-500 text-white px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            <span className="font-medium">Enable notifications to receive important updates from management</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button 
+              onClick={requestNotificationPermission}
+              size="sm"
+              variant="secondary"
+              className="bg-white text-blue-600 hover:bg-blue-50"
+            >
+              Enable
+            </Button>
+            <Button 
+              onClick={() => setShowNotificationBanner(false)}
+              size="sm"
+              variant="ghost"
+              className="text-white hover:bg-blue-600"
+            >
+              Later
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Desktop View */}
       <div className="hidden md:block">
         {/* Header with gradient */}
