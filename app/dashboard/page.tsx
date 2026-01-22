@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { supabase } from '@/lib/supabase'
-import { getFCMToken, onMessageListener } from '@/lib/firebase'
+import { getFCMToken, onMessageListener, logFCMStatus } from '@/lib/firebase'
 import AttendanceButton from '@/components/AttendanceButton'
 import AttendanceHistory from '@/components/AttendanceHistory'
 import JobChecklist from '@/components/JobChecklist'
@@ -128,6 +128,15 @@ export default function DashboardPage() {
       if (Notification.permission === 'default') {
         setShowNotificationBanner(true)
       }
+      
+      // Log FCM status for debugging (only in development)
+      if (process.env.NODE_ENV === 'development') {
+        logFCMStatus().then(status => {
+          if (!status.configured || !status.token) {
+            console.warn('⚠️ FCM not fully configured. Notifications will work in-app only.')
+          }
+        })
+      }
     }
   }, [])
 
@@ -158,8 +167,11 @@ export default function DashboardPage() {
         // Refresh notifications list and unread count
         fetchUnreadCount()
       })
-      .catch((err) => console.error('Failed to receive message:', err))
-  }, [])
+      .catch((err) => {
+        // Silently ignore FCM errors - it's optional
+        console.info('ℹ️ FCM listener not available:', err?.message)
+      })
+  }, [fetchUnreadCount])
 
   const handleLogout = async () => {
     await signOut({ callbackUrl: '/login' })

@@ -5,27 +5,25 @@ import { NextResponse } from 'next/server'
 
 // Helper function to send FCM notification
 async function sendFCMNotification(tokens: string[], title: string, message: string) {
-  // This would integrate with Firebase Cloud Messaging
-  // For now, we'll return a mock response
-  // In production, you would use the Firebase Admin SDK:
-  
-  /*
-  const admin = require('firebase-admin');
-  
-  const payload = {
-    notification: {
-      title: title,
-      body: message,
-    },
-    tokens: tokens
-  };
-  
-  const response = await admin.messaging().sendMulticast(payload);
-  return response;
-  */
-  
-  console.log(`[FCM] Sending notification to ${tokens.length} devices:`, { title, message })
-  return { successCount: tokens.length, failureCount: 0 }
+  // Check if FCM is enabled and configured
+  if (process.env.NEXT_PUBLIC_ENABLE_FCM !== 'true') {
+    console.log('[FCM] Disabled via config, skipping push notification')
+    return { successCount: 0, failureCount: 0 }
+  }
+
+  if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
+    console.warn('[FCM] Firebase Admin credentials not configured, skipping push notification')
+    return { successCount: 0, failureCount: 0 }
+  }
+
+  try {
+    const { sendNotificationToTokens } = await import('@/lib/firebase-admin')
+    const response = await sendNotificationToTokens(tokens, title, message)
+    return { successCount: response.successCount, failureCount: response.failureCount }
+  } catch (error: any) {
+    console.error('[FCM] Error sending notification:', error.message)
+    return { successCount: 0, failureCount: tokens.length }
+  }
 }
 
 // GET all notifications (admin only)
