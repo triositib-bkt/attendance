@@ -11,6 +11,18 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 }
 
+// Log missing config in production for debugging
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
+  const missingVars = []
+  if (!firebaseConfig.apiKey) missingVars.push('NEXT_PUBLIC_FIREBASE_API_KEY')
+  if (!firebaseConfig.projectId) missingVars.push('NEXT_PUBLIC_FIREBASE_PROJECT_ID')
+  if (!firebaseConfig.appId) missingVars.push('NEXT_PUBLIC_FIREBASE_APP_ID')
+  
+  if (missingVars.length > 0) {
+    console.warn('⚠️ Missing Firebase config:', missingVars.join(', '))
+  }
+}
+
 // Initialize Firebase
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
 

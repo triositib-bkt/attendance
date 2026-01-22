@@ -13,12 +13,20 @@ async function sendFCMNotification(tokens: string[], title: string, message: str
 
   if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
     console.warn('[FCM] Firebase Admin credentials not configured, skipping push notification')
+    console.warn('[FCM] Missing:', {
+      projectId: !process.env.FIREBASE_PROJECT_ID,
+      clientEmail: !process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: !process.env.FIREBASE_PRIVATE_KEY
+    })
     return { successCount: 0, failureCount: 0 }
   }
 
+  console.log(`[FCM] Attempting to send to ${tokens.length} devices`)
+  
   try {
     const { sendNotificationToTokens } = await import('@/lib/firebase-admin')
     const response = await sendNotificationToTokens(tokens, title, message)
+    console.log(`[FCM] Result: ${response.successCount} success, ${response.failureCount} failed`)
     return { successCount: response.successCount, failureCount: response.failureCount }
   } catch (error: any) {
     console.error('[FCM] Error sending notification:', error.message)
