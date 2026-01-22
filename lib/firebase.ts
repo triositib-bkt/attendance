@@ -67,47 +67,70 @@ export async function getFCMToken(): Promise<string | null> {
         if (oldServiceWorker) {
           await oldServiceWorker.unregister()
           console.log('✅ Old service worker unregistered')
+          // Wait for unregister to complete
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
 
-        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+        let registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
           scope: '/',
           updateViaCache: 'none'
         })
         
-        // Wait for service worker to be ready
-        await navigator.serviceWorker.ready
+        console.log('🔄 Service worker registered, waiting for activation...')
         
-        // Get the registration again to ensure it's fresh
-        const readyRegistration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js')
+        // Wait for the specific registration to be active
+        if (registration.installing) {
+          await new Promise(resolve => {
+            registration.installing!.addEventListener('statechange', function() {
+              if (this.state === 'activated') {
+                resolve(undefined)
+              }
+            })
+          })
+        } else if (registration.waiting) {
+          // If there's a waiting worker, activate it
+          registration.waiting.postMessage({ type: 'SKIP_WAITING' })
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
         
-        if (!readyRegistration) {
-          console.warn('Service worker registration not found after ready')
+        // Make sure we have the latest registration
+        registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js') || registration
+        
+        if (!registration.active) {
+          console.warn('Service worker not activated yet, waiting...')
+          await navigator.serviceWorker.ready
+          registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js') || registration
+        }
+        
+        if (!registration.active) {
+          console.error('Service worker failed to activate')
           return null
         }
         
+        console.log('✅ Service Worker active:', registration.active.scriptURL)
+        
         // Verify registration has pushManager
-        if (!readyRegistration.pushManager) {
+        if (!registration.pushManager) {
           console.warn('Service worker registration missing pushManager')
           return null
         }
         
-        console.log('✅ Service Worker registered successfully')
+        console.log('✅ PushManager verified')
         
-        // Longer delay for production
-        await new Promise(resolve => setTimeout(resolve, 1500))
-        
-        // Get messaging with the verified registration
+        // Now get messaging - it should pick up the active service worker
         const messaging = getMessaging(app)
+        
+        // Get token with explicit service worker registration
         const token = await getToken(messaging, {
           vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-          serviceWorkerRegistration: readyRegistration
+          serviceWorkerRegistration: registration
         })
         
         console.log('✅ FCM token obtained successfully')
         return token
         
-      } catch (swError) {
-        console.warn('Service worker registration failed:', swError)
+      } catch (swError: any) {
+        console.error('Service worker error:', swError.message || swError)
         return null
       }
     } else {
