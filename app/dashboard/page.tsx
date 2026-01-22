@@ -7,11 +7,12 @@ import { supabase } from '@/lib/supabase'
 import AttendanceButton from '@/components/AttendanceButton'
 import AttendanceHistory from '@/components/AttendanceHistory'
 import JobChecklist from '@/components/JobChecklist'
+import NotificationsList from '@/components/NotificationsList'
 import { Profile } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-type TabType = 'attendance' | 'checkin' | 'jobs' | 'profile'
+type TabType = 'attendance' | 'checkin' | 'jobs' | 'notifications' | 'profile'
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
@@ -179,6 +180,11 @@ export default function DashboardPage() {
           <div className="mt-8">
             <JobChecklist />
           </div>
+
+          {/* Notifications */}
+          <div className="mt-8">
+            <NotificationsList />
+          </div>
         </main>
       </div>
 
@@ -234,6 +240,14 @@ export default function DashboardPage() {
             <div className="space-y-4">
               <h2 className="text-xl font-bold">Today's Jobs</h2>
               <JobChecklist />
+            </div>
+          )}
+
+          {/* Notifications Tab */}
+          {activeTab === 'notifications' && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold">Notifications</h2>
+              <NotificationsList />
             </div>
           )}
 
@@ -336,6 +350,22 @@ export default function DashboardPage() {
               </svg>
               <span className="text-xs font-medium">Jobs</span>
             </button>
+
+            {/* Notifications Tab */}
+            <button
+              onClick={() => setActiveTab('notifications')}
+              className={`flex-1 flex flex-col items-center justify-center py-3 transition-colors ${
+                activeTab === 'notifications'
+                  ? 'text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              <span className="text-xs font-medium">Notifications</span>
+            </button>
+
             {/* Profile Tab */}
             <button
               onClick={() => setActiveTab('profile')}

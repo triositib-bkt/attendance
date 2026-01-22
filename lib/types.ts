@@ -109,3 +109,43 @@ export interface EmployeeSchedule {
   created_at: string
   updated_at: string
 }
+
+export interface Notification {
+  id: string
+  title: string
+  message: string
+  type: 'info' | 'warning' | 'success' | 'error' | 'announcement'
+  sent_by: string | null
+  is_broadcast: boolean
+  created_at: string
+}
+
+export interface NotificationRecipient {
+  id: string
+  notification_id: string
+  user_id: string
+  is_read: boolean
+  read_at: string | null
+  created_at: string
+}
+
+export interface NotificationWithDetails extends Notification {
+  sender?: {
+    full_name: string
+    email: string
+  }
+  is_read?: boolean
+  read_at?: string | null
+}
+
+export interface FCMToken {
+  id: string
+  user_id: string
+  token: string
+  device_type: string | null
+  device_info: string | null
+  is_active: boolean
+  last_used_at: string
+  created_at: string
+  updated_at: string
+}
