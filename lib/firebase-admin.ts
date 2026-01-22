@@ -2,16 +2,36 @@ import * as admin from 'firebase-admin'
 
 if (!admin.apps.length) {
   try {
+    // Handle private key - it might be base64 encoded or have escaped newlines
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY
+    
+    if (!privateKey) {
+      console.error('❌ FIREBASE_PRIVATE_KEY is not set')
+    } else {
+      // Replace literal \n with actual newlines
+      privateKey = privateKey.replace(/\\n/g, '\n')
+      
+      // If it's base64 encoded, decode it
+      if (!privateKey.includes('BEGIN PRIVATE KEY')) {
+        try {
+          privateKey = Buffer.from(privateKey, 'base64').toString('utf-8')
+        } catch (e) {
+          console.warn('⚠️ Private key is not base64 encoded, using as-is')
+        }
+      }
+    }
+    
     admin.initializeApp({
       credential: admin.credential.cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        privateKey: privateKey,
       }),
     })
     console.log('✅ Firebase Admin initialized successfully')
-  } catch (error) {
-    console.error('❌ Firebase Admin initialization failed:', error)
+  } catch (error: any) {
+    console.error('❌ Firebase Admin initialization failed:', error.message)
+    console.error('   Make sure FIREBASE_PRIVATE_KEY is properly formatted')
   }
 }
 
