@@ -69,8 +69,9 @@ export default function SimpleTestPage() {
         body: JSON.stringify({
           title: 'Test Notification',
           message: 'This is a test notification from simple-test page',
-          sendToAll: false,
-          selectedUserIds: []
+          type: 'info',
+          is_broadcast: true,
+          recipient_ids: []
         })
       })
       
