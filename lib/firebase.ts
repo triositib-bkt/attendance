@@ -117,6 +117,9 @@ export async function getFCMToken(): Promise<string | null> {
         
         console.log('✅ PushManager verified')
         
+        // Additional wait to ensure everything is fully initialized
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
         // Now get messaging - it should pick up the active service worker
         const messaging = getMessaging(app)
         
