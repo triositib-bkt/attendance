@@ -117,10 +117,37 @@ export async function getFCMToken(): Promise<string | null> {
         
         console.log('✅ PushManager verified')
         
-        // Additional wait to ensure everything is fully initialized
-        await new Promise(resolve => setTimeout(resolve, 500))
+        // Wait for the service worker to become the controller
+        if (!navigator.serviceWorker.controller || 
+            !navigator.serviceWorker.controller.scriptURL.includes('firebase-messaging-sw')) {
+          console.log('⏳ Waiting for service worker to control the page...')
+          
+          // The service worker needs to control the page for Firebase to work properly
+          // This usually happens automatically after activation, but we'll wait for it
+          await new Promise((resolve) => {
+            const checkController = () => {
+              if (navigator.serviceWorker.controller?.scriptURL.includes('firebase-messaging-sw')) {
+                resolve(undefined)
+              } else {
+                setTimeout(checkController, 100)
+              }
+            }
+            checkController()
+            // Timeout after 5 seconds
+            setTimeout(() => resolve(undefined), 5000)
+          })
+          
+          if (!navigator.serviceWorker.controller) {
+            console.warn('Service worker not controlling page - page reload may be needed')
+            // Try to claim clients
+            registration.active?.postMessage({ type: 'CLIENTS_CLAIM' })
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
+        }
         
-        // Now get messaging - it should pick up the active service worker
+        console.log('✅ Service Worker controller:', navigator.serviceWorker.controller?.scriptURL || 'none')
+        
+        // Now get messaging - it should use the controlling service worker
         const messaging = getMessaging(app)
         
         // Get token with explicit service worker registration

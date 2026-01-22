@@ -30,6 +30,9 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting()
   }
+  if (event.data && event.data.type === 'CLIENTS_CLAIM') {
+    self.clients.claim()
+  }
 })
 
 // Handle background messages
