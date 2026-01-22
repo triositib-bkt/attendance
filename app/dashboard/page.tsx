@@ -67,10 +67,14 @@ export default function DashboardPage() {
         setShowNotificationBanner(false)
         
         // Try to get FCM token and register it (optional - may fail)
+        console.log('🔔 Requesting FCM token...')
         const token = await getFCMToken()
+        console.log('🔔 FCM Token result:', token ? 'Success' : 'Failed')
+        
         if (token) {
           try {
-            await fetch('/api/notifications/fcm-token', {
+            console.log('🔔 Registering token with backend...')
+            const response = await fetch('/api/notifications/fcm-token', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -79,13 +83,22 @@ export default function DashboardPage() {
                 device_info: navigator.userAgent
               })
             })
-            alert('✅ Push notifications enabled! You will receive updates from management.')
+            const result = await response.json()
+            console.log('🔔 Token registration result:', result)
+            
+            if (response.ok) {
+              alert('✅ Push notifications enabled! You will receive updates from management.')
+            } else {
+              console.error('Token registration failed:', result)
+              alert('✅ Notifications enabled! (In-app notifications only)')
+            }
           } catch (err) {
             console.error('Failed to register FCM token:', err)
             alert('✅ Notifications enabled! (In-app notifications only)')
           }
         } else {
           // FCM not available, but browser notifications still work
+          console.warn('⚠️ FCM token not available, using in-app notifications only')
           alert('✅ Notifications enabled! (In-app notifications only)')
         }
       } else if (permission === 'denied') {

@@ -12,16 +12,34 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging()
 
+console.log('🔔 Firebase Messaging Service Worker loaded')
+
 // Handle background messages
 messaging.onBackgroundMessage((payload) => {
-  console.log('Received background message:', payload)
+  console.log('🔔 Received background message:', payload)
   
-  const notificationTitle = payload.notification.title
+  const notificationTitle = payload.notification?.title || 'New Notification'
   const notificationOptions = {
-    body: payload.notification.body,
+    body: payload.notification?.body || 'You have a new notification',
     icon: '/icon-192x192.png',
-    badge: '/badge-72x72.png'
+    badge: '/badge-72x72.png',
+    tag: 'notification-' + Date.now(),
+    requireInteraction: false,
+    data: payload.data
   }
 
-  self.registration.showNotification(notificationTitle, notificationOptions)
+  console.log('🔔 Showing notification:', notificationTitle, notificationOptions)
+  
+  return self.registration.showNotification(notificationTitle, notificationOptions)
+})
+
+// Handle notification click
+self.addEventListener('notificationclick', (event) => {
+  console.log('🔔 Notification clicked:', event.notification.tag)
+  event.notification.close()
+  
+  // Open the app
+  event.waitUntil(
+    clients.openWindow('/')
+  )
 })
