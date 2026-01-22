@@ -15,6 +15,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export default function JobChecklistsAdminPage() {
   const [checklists, setChecklists] = useState<any[]>([])
@@ -28,6 +36,9 @@ export default function JobChecklistsAdminPage() {
   })
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [checklistToDelete, setChecklistToDelete] = useState<any>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     fetchLocations()
@@ -85,6 +96,37 @@ export default function JobChecklistsAdminPage() {
 
   const goToPage = (page: number) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
+
+  const handleDeleteClick = (checklist: any) => {
+    setChecklistToDelete(checklist)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!checklistToDelete) return
+    
+    setDeleting(true)
+    try {
+      const response = await fetch(`/api/admin/job-checklists/${checklistToDelete.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        // Refresh the list
+        await fetchChecklists()
+        setDeleteDialogOpen(false)
+        setChecklistToDelete(null)
+      } else {
+        const error = await response.json()
+        alert(`Failed to delete checklist: ${error.error}`)
+      }
+    } catch (error) {
+      console.error('Failed to delete checklist:', error)
+      alert('Failed to delete checklist')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   if (loading && checklists.length === 0) {
@@ -263,8 +305,16 @@ export default function JobChecklistsAdminPage() {
                     </div>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </CardContent>              <CardContent className="pt-0">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => handleDeleteClick(checklist)}
+                  className="w-full"
+                >
+                  Delete Checklist
+                </Button>
+              </CardContent>            </Card>
           ))
         )}
         {/* Mobile Pagination */}
@@ -329,12 +379,13 @@ export default function JobChecklistsAdminPage() {
               <TableHead>Completed At</TableHead>
               <TableHead>Photos</TableHead>
               <TableHead>Notes</TableHead>
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {checklists.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center h-24 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
                   No job checklists for this date
                 </TableCell>
               </TableRow>
@@ -416,6 +467,15 @@ export default function JobChecklistsAdminPage() {
                       {checklist.notes || '-'}
                     </div>
                   </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDeleteClick(checklist)}
+                    >
+                      Delete
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -470,6 +530,50 @@ export default function JobChecklistsAdminPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Job Checklist</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this checklist?
+            </DialogDescription>
+          </DialogHeader>
+          {checklistToDelete && (
+            <div className="py-4">
+              <p className="text-sm">
+                <strong>Job:</strong> {checklistToDelete.job_template?.title}
+              </p>
+              <p className="text-sm">
+                <strong>Location:</strong> {checklistToDelete.office_area?.location?.name} → {checklistToDelete.office_area?.name}
+              </p>
+              <p className="text-sm">
+                <strong>Date:</strong> {checklistToDelete.assigned_date}
+              </p>
+              <p className="text-sm">
+                <strong>Status:</strong> {checklistToDelete.completed_at ? 'Completed' : 'Pending'}
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
