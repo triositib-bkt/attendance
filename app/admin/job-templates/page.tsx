@@ -51,6 +51,7 @@ export default function JobTemplatesPage() {
   const [generateFormData, setGenerateFormData] = useState({
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
+    location_id: 'all',
   })
 
   useEffect(() => {
@@ -221,6 +222,7 @@ export default function JobTemplatesPage() {
         body: JSON.stringify({
           startDate: generateFormData.startDate,
           endDate: generateFormData.endDate,
+          location_id: generateFormData.location_id,
         }),
       })
 
@@ -231,9 +233,12 @@ export default function JobTemplatesPage() {
         const dateRange = generateFormData.startDate === generateFormData.endDate
           ? generateFormData.startDate
           : `${generateFormData.startDate} to ${generateFormData.endDate}`
+        const locationName = generateFormData.location_id === 'all' 
+          ? 'all locations'
+          : locations.find(l => l.id === generateFormData.location_id)?.name || 'selected location'
         setMessage({ 
           type: 'success', 
-          text: `Generated ${result.totalCreated} new checklist(s) for ${dateRange}! (${result.skipped} already existed)` 
+          text: `Generated ${result.totalCreated} new checklist(s) for ${locationName} (${dateRange})! (${result.skipped} already existed)` 
         })
         setTimeout(() => setMessage(null), 5000)
       } else {
@@ -789,6 +794,22 @@ export default function JobTemplatesPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="gen-location">Location</Label>
+              <select
+                id="gen-location"
+                value={generateFormData.location_id}
+                onChange={(e) => setGenerateFormData({ ...generateFormData, location_id: e.target.value })}
+                className="w-full p-2 border rounded-md"
+              >
+                <option value="all">All Locations</option>
+                {locations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="gen-start-date">Start Date</Label>
               <Input
