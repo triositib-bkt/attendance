@@ -14,6 +14,24 @@ const messaging = firebase.messaging()
 
 console.log('🔔 Firebase Messaging Service Worker loaded')
 
+// Activate immediately
+self.addEventListener('install', (event) => {
+  console.log('🔔 Service worker installing')
+  self.skipWaiting()
+})
+
+self.addEventListener('activate', (event) => {
+  console.log('🔔 Service worker activated')
+  event.waitUntil(clients.claim())
+})
+
+// Handle SKIP_WAITING message
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
+})
+
 // Handle background messages
 messaging.onBackgroundMessage((payload) => {
   console.log('🔔 Received background message:', payload)
