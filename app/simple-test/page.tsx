@@ -8,6 +8,27 @@ export default function SimpleTestPage() {
   const [status, setStatus] = useState<string>('')
   const [token, setToken] = useState<string>('')
 
+  const testBrowserNotification = () => {
+    if (!('Notification' in window)) {
+      alert('Notifications not supported')
+      return
+    }
+    
+    if (Notification.permission !== 'granted') {
+      alert('Please grant notification permission first')
+      return
+    }
+    
+    new Notification('Test Browser Notification', {
+      body: 'This is a direct browser notification test',
+      icon: '/icon-192x192.png',
+      badge: '/badge-72x72.png',
+      tag: 'test-' + Date.now()
+    })
+    
+    alert('Browser notification shown! If you didn\'t see it, check your browser notification settings.')
+  }
+
   const testFullFlow = async () => {
     setStatus('Testing...\n')
     
@@ -84,13 +105,21 @@ export default function SimpleTestPage() {
       
       const result = await sendRes.json()
       setStatus(prev => prev + `✅ Notification sent!\n`)
-      setStatus(prev => prev + `   DB Recipients: ${result.recipientCount}\n`)
-      setStatus(prev => prev + `   FCM Success: ${result.fcmSuccessCount}\n`)
-      setStatus(prev => prev + `   FCM Failed: ${result.fcmFailureCount}\n`)
+      setStatus(prev => prev + `   DB Recipients: ${result.recipientCount || 'N/A'}\n`)
+      setStatus(prev => prev + `   FCM Success: ${result.fcmSuccessCount || 0}\n`)
+      setStatus(prev => prev + `   FCM Failed: ${result.fcmFailureCount || 0}\n`)
       
-      setStatus(prev => prev + '\n✅ ALL TESTS PASSED!\n')
-      setStatus(prev => prev + '\nCheck your device for the notification popup.\n')
-      setStatus(prev => prev + 'Also check /dashboard for the notification in the list.\n')
+      if (result.fcmSuccessCount > 0) {
+        setStatus(prev => prev + '\n✅ ALL TESTS PASSED!\n')
+        setStatus(prev => prev + '\nYou should see a notification popup.\n')
+        setStatus(prev => prev + 'If you\'re on this page, it will show as a browser notification.\n')
+        setStatus(prev => prev + 'If the page is in background, the service worker will show it.\n')
+      } else {
+        setStatus(prev => prev + '\n⚠️ FCM notification was not sent!\n')
+        setStatus(prev => prev + 'Check Vercel function logs for errors.\n')
+      }
+      
+      setStatus(prev => prev + '\nAlso check /dashboard for the notification in the list.\n')
       
     } catch (error: any) {
       setStatus(prev => prev + `❌ Error: ${error.message}\n`)
@@ -109,9 +138,14 @@ export default function SimpleTestPage() {
               This will test the entire notification flow from getting a token to sending a notification.
             </p>
             
-            <Button onClick={testFullFlow} className="w-full">
-              Run Full Test
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={testFullFlow} className="flex-1">
+                Run Full Test
+              </Button>
+              <Button onClick={testBrowserNotification} variant="outline" className="flex-1">
+                Test Browser Notification
+              </Button>
+            </div>
             
             {status && (
               <Card className="bg-muted">
