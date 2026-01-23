@@ -73,8 +73,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  console.log('Fetched schedules:', data?.length || 0)
-  return NextResponse.json({ data, error: null })
+  // Filter schedules to show only those starting at or after 7:00 AM
+  const filteredData = data?.filter(schedule => {
+    if (!schedule.shift_start) return true // Keep schedules without start time
+    const [hours] = schedule.shift_start.split(':').map(Number)
+    return hours >= 7 // Only show schedules starting at 7 AM or later
+  }) || []
+
+  console.log('Fetched schedules:', data?.length || 0, 'Filtered (7 AM+):', filteredData.length)
+  return NextResponse.json({ data: filteredData, error: null })
 }
 
 export async function POST(request: Request) {
