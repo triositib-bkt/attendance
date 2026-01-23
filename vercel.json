@@ -3,5 +3,11 @@
   "devCommand": "next dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "crons": [
+    {
+      "path": "/api/cron/cleanup-notifications",
+      "schedule": "0 2 * * *"
+    }
+  ]
 }
