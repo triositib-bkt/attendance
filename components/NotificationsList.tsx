@@ -153,7 +153,7 @@ export default function NotificationsList() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <div>
           <h2 className="text-xl font-semibold">Notifications</h2>
           {unreadCount > 0 && (
@@ -163,7 +163,7 @@ export default function NotificationsList() {
           )}
         </div>
         {unreadCount > 0 && (
-          <Button variant="outline" size="sm" onClick={markAllAsRead}>
+          <Button variant="outline" size="sm" onClick={markAllAsRead} className="w-full sm:w-auto">
             Mark all as read
           </Button>
         )}
