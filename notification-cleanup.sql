@@ -19,7 +19,6 @@ $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION cleanup_old_notifications IS 'Deletes notifications older than specified days (default: 2 days). Cascades to notification_recipients.';
 
--- Optional: Create an index on created_at if not exists for better cleanup performance
-CREATE INDEX IF NOT EXISTS idx_notifications_cleanup 
-ON notifications(created_at) 
-WHERE created_at < NOW() - INTERVAL '2 days';
+-- Create a simple index on created_at for better cleanup performance
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at_cleanup 
+ON notifications(created_at DESC);

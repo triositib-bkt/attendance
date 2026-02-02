@@ -124,11 +124,12 @@ export default function SchedulesPage() {
       if (selectedMonth) params.append('month', selectedMonth)
       
       const url = `/api/admin/schedules?${params.toString()}`
-      console.log('Fetching schedules from:', url)
+      console.log('[Frontend] Fetching schedules from:', url)
+      console.log('[Frontend] Filters - Year:', selectedYear, 'Month:', selectedMonth, 'Employee:', selectedEmployee, 'Location:', selectedLocation)
       const response = await fetch(url)
       const result = await response.json()
-      console.log('Schedules result:', result)
-      console.log('Number of schedules:', result.data?.length || 0)
+      console.log('[Frontend] Schedules result:', result)
+      console.log('[Frontend] Number of schedules:', result.data?.length || 0)
       setSchedules(result.data || [])
     } catch (error) {
       console.error('Failed to fetch schedules:', error)
