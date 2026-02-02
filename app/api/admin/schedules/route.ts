@@ -58,7 +58,12 @@ export async function GET(request: Request) {
     const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate()
     const endDate = `${year}-${month.padStart(2, '0')}-${lastDay}`
     
-    query = query.or(`and(effective_date.gte.${startDate},effective_date.lte.${endDate}),and(effective_date.is.null,end_date.is.null)`)
+    console.log(`[Schedules API] Filtering for ${year}-${month}: startDate=${startDate}, endDate=${endDate}`)
+    
+    // Show schedules that are active during the selected month:
+    // 1. Schedules that start before or during the month AND (have no end_date OR end after month starts)
+    // 2. This ensures we show schedules that were created in previous months but are still active
+    query = query.or(`and(effective_date.lte.${endDate},or(end_date.is.null,end_date.gte.${startDate})),and(effective_date.is.null,end_date.is.null)`)
   }
 
   query = query
@@ -73,15 +78,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Filter schedules to show only those starting at or after 7:00 AM
-  const filteredData = data?.filter(schedule => {
-    if (!schedule.shift_start) return true // Keep schedules without start time
-    const [hours] = schedule.shift_start.split(':').map(Number)
-    return hours >= 7 // Only show schedules starting at 7 AM or later
-  }) || []
+  console.log(`[Schedules API] Query returned ${data?.length || 0} schedules`)
+  
+  // Log first few schedules for debugging
+  if (data && data.length > 0) {
+    console.log('[Schedules API] Sample schedules:', data.slice(0, 3).map(s => ({
+      id: s.id,
+      effective_date: s.effective_date,
+      end_date: s.end_date,
+      shift_start: s.shift_start,
+      user: s.profiles?.full_name
+    })))
+  }
 
-  console.log('Fetched schedules:', data?.length || 0, 'Filtered (7 AM+):', filteredData.length)
-  return NextResponse.json({ data: filteredData, error: null })
+  return NextResponse.json({ data: data || [], error: null })
 }
 
 export async function POST(request: Request) {
@@ -104,6 +114,8 @@ export async function POST(request: Request) {
 
   const body = await request.json()
   const { user_id, day_of_week, shift_start, shift_end, location_id, effective_date, end_date } = body
+
+  console.log('[Schedules API POST] Creating schedule:', { user_id, day_of_week, shift_start, shift_end, location_id, effective_date, end_date })
 
   if (!user_id || day_of_week === undefined || !shift_start || !shift_end) {
     return NextResponse.json(
@@ -143,9 +155,10 @@ export async function POST(request: Request) {
     .select()
 
   if (error) {
-    console.error('Supabase error:', error)
+    console.error('[Schedules API POST] Supabase error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  console.log('[Schedules API POST] Schedule created successfully:', data)
   return NextResponse.json({ data, error: null }, { status: 201 })
 }
